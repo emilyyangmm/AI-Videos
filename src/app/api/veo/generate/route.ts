@@ -104,6 +104,46 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 /**
+ * 获取图片并转为 base64
+ */
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error("获取图片失败:", response.status);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return base64;
+  } catch (error) {
+    console.error("图片转 base64 失败:", error);
+    return null;
+  }
+}
+
+/**
+ * 保存 base64 视频到本地
+ */
+async function saveBase64Video(base64Data: string): Promise<string> {
+  const { writeFileSync, mkdirSync, existsSync } = await import("fs");
+  const { join } = await import("path");
+  
+  const dir = "/tmp/veo_videos";
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  
+  const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+  const filepath = join(dir, filename);
+  
+  writeFileSync(filepath, Buffer.from(base64Data, "base64"));
+  
+  // 返回 API URL
+  return `/api/videos/${filename}`;
+}
+
+/**
  * Veo 视频生成API
  * 
  * POST: 批量提交视频生成任务
@@ -127,13 +167,14 @@ async function getAccessToken(): Promise<string | null> {
  *     veoPrompt: { chinese: string, english: string },
  *     audioPrompt: { chinese: string, english: string },
  *     parameters: { aspectRatio, duration, generateAudio }
- *   }]
+ *   }],
+ *   materials?: [{ shotIndex, type, url, category }] // 可选：用户上传的素材
  * }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, shots, aspectRatio = "16:9" } = body;
+    const { projectId, shots, materials, aspectRatio = "16:9" } = body;
 
     // 验证参数
     if (!projectId) {
@@ -177,11 +218,40 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 固定8秒时长
-      const duration = 8;
+      // 从 shot.parameters?.duration 读取时长，限制在 [4, 6, 8]
+      const allowedDurations = [4, 6, 8];
+      const requestedDuration = shot.parameters?.duration || shot.duration || 8;
+      const duration = allowedDurations.includes(requestedDuration) 
+        ? requestedDuration 
+        : 8;
+
+      // 构建 instance，支持图生视频
+      const instance: any = { prompt };
+
+      // 如果该分镜有对应素材，加入图片
+      if (materials && materials.length > 0) {
+        const shotMaterial = materials.find((m: any) => 
+          m.shotIndex === i && m.type === "image"
+        );
+        
+        if (shotMaterial?.url) {
+          console.log(`📷 分镜 ${i + 1} 找到图片素材:`, shotMaterial.url);
+          const imageBase64 = await fetchImageAsBase64(shotMaterial.url);
+          
+          if (imageBase64) {
+            instance.image = {
+              bytesBase64Encoded: imageBase64,
+              mimeType: "image/jpeg",
+            };
+            console.log(`✅ 分镜 ${i + 1} 图片已添加到请求`);
+          } else {
+            console.warn(`⚠️ 分镜 ${i + 1} 图片处理失败，将使用纯文本生成`);
+          }
+        }
+      }
       
       const payload = {
-        instances: [{ prompt }],
+        instances: [instance],
         parameters: {
           aspectRatio: shot.parameters?.aspectRatio || aspectRatio,
           durationSeconds: duration,
@@ -235,9 +305,10 @@ export async function POST(request: NextRequest) {
           success: true,
           operationName,
           prompt: prompt.slice(0, 100) + "...",
+          hasImage: !!instance.image,
         });
 
-        console.log(`✅ 分镜 ${i + 1} 任务已提交:`, operationName);
+        console.log(`✅ 分镜 ${i + 1} 任务已提交:`, operationName, instance.image ? "(含图片)" : "(纯文本)");
         
       } catch (error) {
         results.push({
@@ -250,12 +321,14 @@ export async function POST(request: NextRequest) {
     }
 
     const successCount = results.filter(r => r.success).length;
+    const imageCount = results.filter(r => r.hasImage).length;
     
     return NextResponse.json({
       success: true,
-      message: `成功提交 ${successCount}/${shots.length} 个视频生成任务`,
+      message: `成功提交 ${successCount}/${shots.length} 个视频生成任务（其中 ${imageCount} 个使用图片）`,
       totalShots: shots.length,
       successCount,
+      imageCount,
       results,
     });
   } catch (error) {
@@ -356,41 +429,33 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 处理 base64 视频
+    // 处理 base64 视频 - 保存到本地而不是 Coze S3
     const base64Data = video.bytesBase64Encoded;
     if (base64Data) {
-      // 保存到对象存储
-      const { S3Storage } = await import("coze-coding-dev-sdk");
-      const storage = new S3Storage({
-        endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-        bucketName: process.env.COZE_BUCKET_NAME,
-        region: "cn-beijing",
-      });
+      try {
+        // 保存到本地 /tmp 目录
+        const videoUrl = await saveBase64Video(base64Data);
 
-      const buffer = Buffer.from(base64Data, "base64");
-      const fileKey = await storage.uploadFile({
-        fileContent: buffer,
-        fileName: `veo-videos/${Date.now()}.mp4`,
-        contentType: "video/mp4",
-      });
+        // 更新数据库 - 保存本地 URL
+        const supabaseClient = getSupabaseClient();
+        await supabaseClient
+          .from("videos")
+          .update({ status: "completed", video_url: videoUrl })
+          .eq("veo_operation_id", operationName);
 
-      const videoUrl = await storage.generatePresignedUrl({
-        key: fileKey,
-        expireTime: 86400 * 30, // 30天
-      });
-
-      // 更新数据库
-      const supabaseClient = getSupabaseClient();
-      await supabaseClient
-        .from("videos")
-        .update({ status: "completed", video_url: videoUrl })
-        .eq("veo_operation_id", operationName);
-
-      return NextResponse.json({
-        success: true,
-        done: true,
-        video_url: videoUrl,
-      });
+        return NextResponse.json({
+          success: true,
+          done: true,
+          video_url: videoUrl,
+        });
+      } catch (saveError) {
+        console.error("保存视频失败:", saveError);
+        return NextResponse.json({
+          success: false,
+          done: true,
+          error: "保存视频文件失败: " + String(saveError),
+        });
+      }
     }
 
     return NextResponse.json({
