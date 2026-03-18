@@ -73,7 +73,8 @@ const STEPS = [
   { id: 4, title: "脚本生成", icon: FileText, description: "生成基础脚本" },
   { id: 5, title: "分镜脚本", icon: Film, description: "按8秒拆分分镜" },
   { id: 6, title: "素材上传", icon: Upload, description: "根据分镜上传素材" },
-  { id: 7, title: "视频生成", icon: Video, description: "Veo生成视频" },
+  { id: 7, title: "视频生成", icon: Video, description: "Veo生成视频片段" },
+  { id: 8, title: "剪辑合成", icon: Play, description: "剪辑合成最终视频" },
 ];
 
 // 维度一：商户类型配置
@@ -1847,15 +1848,193 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 导出按钮 */}
+                {/* 进入剪辑按钮 */}
                 {completedCount === veoOperations.size && veoOperations.size > 0 && (
-                  <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600">
-                    <Download className="w-4 h-4 mr-2" />
-                    导出最终视频
+                  <Button 
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
+                    onClick={() => setCurrentStepWithTrack(8)}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    进入视频剪辑
                   </Button>
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {/* 步骤8: 视频剪辑合成 */}
+          {currentStep === 8 && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Play className="w-5 h-5 text-purple-600" />
+                    第8步：视频剪辑合成
+                  </CardTitle>
+                  <CardDescription>
+                    调整片段顺序、添加转场效果、合成最终视频
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {videos.length > 0 ? (
+                    <>
+                      {/* 视频片段列表 */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <span>🎬</span> 视频片段（可拖拽调整顺序）
+                        </h4>
+                        <div className="space-y-3">
+                          {videos.map((video: any, index: number) => (
+                            <div 
+                              key={video.id || index} 
+                              className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border"
+                            >
+                              <div className="flex items-center gap-4">
+                                <Badge variant="secondary" className="text-lg px-3 py-1">
+                                  {index + 1}
+                                </Badge>
+                                <div className="flex-1">
+                                  <div className="aspect-video bg-gray-200 rounded-lg overflow-hidden max-w-[200px]">
+                                    {video.videoUrl?.startsWith("gs://") ? (
+                                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                                        <Video className="w-8 h-8 text-gray-400" />
+                                      </div>
+                                    ) : (
+                                      <video 
+                                        src={video.videoUrl} 
+                                        className="w-full h-full object-cover"
+                                        preload="metadata"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge>分镜 {video.shotId || index + 1}</Badge>
+                                    <span className="text-sm text-gray-500">
+                                      {video.duration || 5}秒
+                                    </span>
+                                  </div>
+                                  {/* 转场选择 */}
+                                  {index > 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-500">转场：</span>
+                                      <select 
+                                        className="text-xs border rounded px-2 py-1"
+                                        defaultValue="fade"
+                                      >
+                                        <option value="none">无</option>
+                                        <option value="fade">淡入淡出</option>
+                                        <option value="wipe">擦除</option>
+                                        <option value="dissolve">溶解</option>
+                                      </select>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <Button variant="outline" size="sm" disabled={index === 0}>
+                                    ↑
+                                  </Button>
+                                  <Button variant="outline" size="sm" disabled={index === videos.length - 1}>
+                                    ↓
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 剪辑设置 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* BGM选择 */}
+                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <label className="text-sm font-medium flex items-center gap-2 mb-3">
+                            <span>🎵</span> 背景音乐
+                          </label>
+                          <select className="w-full border rounded-lg px-3 py-2 text-sm">
+                            <option value="">选择背景音乐风格</option>
+                            <option value="upbeat">欢快动感</option>
+                            <option value="warm">温馨治愈</option>
+                            <option value="trendy">时尚潮流</option>
+                            <option value="elegant">优雅大气</option>
+                          </select>
+                        </div>
+
+                        {/* 字幕设置 */}
+                        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                          <label className="text-sm font-medium flex items-center gap-2 mb-3">
+                            <span>📝</span> 字幕设置
+                          </label>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm">
+                              <input type="checkbox" defaultChecked />
+                              <span>自动生成字幕</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input type="checkbox" defaultChecked />
+                              <span>显示标题卡片</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 视频信息汇总 */}
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-sm font-medium text-green-700">视频信息</span>
+                            <p className="text-xs text-green-600 mt-1">
+                              共 {videos.length} 个片段 · 预估时长 {videos.reduce((sum: number, v: any) => sum + (v.duration || 5), 0)} 秒
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-green-700">
+                            16:9 格式
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* 操作按钮 */}
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCurrentStepWithTrack(7)}
+                          className="flex-1"
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-2" />
+                          返回视频生成
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            toast.success("开始合成最终视频...");
+                            // 这里调用剪辑API
+                          }}
+                          disabled={loading}
+                          className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              合成中...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4 mr-2" />
+                              合成并导出视频
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Play className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-600">请先在步骤7完成视频生成</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </main>
