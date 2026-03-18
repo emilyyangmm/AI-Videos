@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Target, Sparkles, Lightbulb, Upload, FileText, Video, 
-  CheckCircle2, Circle, Loader2, ChevronRight, RefreshCw,
-  Play, Download, Trash2, Plus
+  CheckCircle2, Loader2, ChevronRight, RefreshCw,
+  Play, Download, Trash2, Plus, Clock
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -318,7 +317,11 @@ export default function Home() {
     }
   };
 
-  // 生成视频
+  // Veo 视频生成状态
+  const [veoOperations, setVeoOperations] = useState<Map<string, { status: string; progress: number; videoUrl?: string }>>(new Map());
+  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // 提交 Veo 视频生成任务
   const generateVideos = async () => {
     if (!project || !script) return;
 
@@ -328,33 +331,128 @@ export default function Home() {
       const shots = script.shot_list?.flatMap((scene: any) => 
         scene.shots.map((shot: any) => ({
           ...shot,
-          duration: parseInt(shot.duration) || 5,
-          veoPrompt: `${shot.visual}, ${scene.colorTone} tone, professional camera movement`,
+          duration: parseInt(shot.duration) || 8,
+          veoPrompt: `${shot.visual}, ${scene.colorTone} tone, professional camera movement, cinematic quality`,
         }))
       ) || [];
 
-      const res = await fetch("/api/videos/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          scriptId: script.id,
-          shots,
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setVideos(data.results.filter((r: any) => r.success));
-        setCurrentStep(6);
-        toast.success(data.message);
+      if (shots.length === 0) {
+        toast.error("没有可生成的分镜");
+        return;
       }
+
+      // 为每个分镜提交任务
+      const newOperations = new Map(veoOperations);
+      
+      for (let i = 0; i < shots.length; i++) {
+        const shot = shots[i];
+        
+        const res = await fetch("/api/veo/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: project.id,
+            prompt: shot.veoPrompt,
+            duration: Math.min(shot.duration, 8), // Veo最大支持8秒
+            aspectRatio: "16:9",
+            shotIndex: i,
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.operation_name) {
+          newOperations.set(data.operation_name, {
+            status: "processing",
+            progress: 5,
+          });
+          
+          // 开始轮询
+          startPolling(data.operation_name, i);
+        }
+      }
+      
+      setVeoOperations(newOperations);
+      setCurrentStep(6);
+      toast.success(`已提交 ${shots.length} 个视频生成任务`);
     } catch (error) {
       toast.error("视频生成失败");
     } finally {
       setLoading(false);
     }
   };
+
+  // 轮询任务状态
+  const startPolling = (operationName: string, shotIndex: number) => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/veo/generate?operation_name=${encodeURIComponent(operationName)}`);
+        const data = await res.json();
+        
+        setVeoOperations(prev => {
+          const newMap = new Map(prev);
+          const current = newMap.get(operationName) || { status: "processing", progress: 5 };
+          
+          if (data.done) {
+            if (data.success) {
+              newMap.set(operationName, {
+                status: "completed",
+                progress: 100,
+                videoUrl: data.video_url || data.gcs_uri,
+              });
+              
+              // 添加到视频列表
+              setVideos(v => [...v, {
+                shotIndex,
+                operationName,
+                videoUrl: data.video_url || data.gcs_uri,
+                success: true,
+              }]);
+              
+              toast.success(`分镜 ${shotIndex + 1} 视频生成完成`);
+            } else {
+              newMap.set(operationName, {
+                status: "failed",
+                progress: 0,
+              });
+              toast.error(`分镜 ${shotIndex + 1} 生成失败: ${data.error}`);
+            }
+            
+            // 停止轮询
+            const timer = pollingRef.current.get(operationName);
+            if (timer) {
+              clearInterval(timer);
+              pollingRef.current.delete(operationName);
+            }
+          } else {
+            // 更新进度
+            newMap.set(operationName, {
+              ...current,
+              progress: Math.min(current.progress + 4, 92),
+            });
+          }
+          
+          return newMap;
+        });
+      } catch (error) {
+        console.error("轮询失败:", error);
+      }
+    };
+    
+    // 每8秒轮询一次
+    const timer = setInterval(poll, 8000);
+    pollingRef.current.set(operationName, timer);
+    
+    // 立即执行一次
+    poll();
+  };
+
+  // 计算总体进度
+  const totalProgress = veoOperations.size > 0
+    ? Array.from(veoOperations.values()).reduce((sum, op) => sum + op.progress, 0) / veoOperations.size
+    : 0;
+  
+  const completedCount = Array.from(veoOperations.values()).filter(op => op.status === "completed").length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -750,38 +848,92 @@ export default function Home() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Video className="w-5 h-5 text-purple-600" />
-                  第6步：视频生成
+                  第6步：视频生成 (Google Veo 3.1)
                 </CardTitle>
                 <CardDescription>
                   AI正在生成您的爆款短视频
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {videos.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {videos.map((video: any, i: number) => (
-                      <div key={i} className="relative rounded-lg overflow-hidden bg-gray-100">
-                        <video
-                          src={video.videoUrl}
-                          controls
-                          className="w-full aspect-video"
-                        />
-                        <div className="absolute bottom-2 left-2">
-                          <Badge variant="secondary">
-                            分镜 {video.shotIndex + 1}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <Loader2 className="w-12 h-12 mx-auto text-purple-600 animate-spin mb-4" />
-                    <p className="text-gray-600">视频生成中，请稍候...</p>
+              <CardContent className="space-y-6">
+                {/* 总体进度 */}
+                {veoOperations.size > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>总体进度</span>
+                      <span>{completedCount}/{veoOperations.size} 完成</span>
+                    </div>
+                    <Progress value={totalProgress} className="h-3" />
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      视频生成通常需要 2~4 分钟，请耐心等待
+                    </p>
                   </div>
                 )}
 
+                {/* 各分镜状态 */}
+                {veoOperations.size > 0 && (
+                  <div className="space-y-3">
+                    {Array.from(veoOperations.entries()).map(([opName, op], index) => (
+                      <div key={opName} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">分镜 {index + 1}</span>
+                          <Badge variant={
+                            op.status === "completed" ? "default" : 
+                            op.status === "failed" ? "destructive" : "secondary"
+                          }>
+                            {op.status === "completed" ? "已完成" : 
+                             op.status === "failed" ? "失败" : "生成中..."}
+                          </Badge>
+                        </div>
+                        <Progress value={op.progress} className="h-2" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 生成的视频 */}
                 {videos.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium">生成的视频</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {videos.map((video: any, i: number) => (
+                        <div key={i} className="relative rounded-lg overflow-hidden bg-gray-100">
+                          {video.videoUrl?.startsWith("gs://") ? (
+                            <div className="aspect-video flex flex-col items-center justify-center p-4 bg-gray-100">
+                              <Video className="w-12 h-12 text-gray-400 mb-2" />
+                              <p className="text-sm text-gray-600 text-center">视频已存储在 GCS</p>
+                              <code className="text-xs bg-gray-200 px-2 py-1 rounded mt-2 break-all">
+                                {video.videoUrl}
+                              </code>
+                            </div>
+                          ) : (
+                            <video
+                              src={video.videoUrl}
+                              controls
+                              className="w-full aspect-video"
+                            />
+                          )}
+                          <div className="absolute bottom-2 left-2">
+                            <Badge variant="secondary">
+                              分镜 {video.shotIndex + 1}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 空状态 */}
+                {veoOperations.size === 0 && (
+                  <div className="text-center py-12">
+                    <Video className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600">等待提交视频生成任务...</p>
+                  </div>
+                )}
+
+                {/* 导出按钮 */}
+                {completedCount === veoOperations.size && veoOperations.size > 0 && (
                   <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600">
                     <Download className="w-4 h-4 mr-2" />
                     导出最终视频
