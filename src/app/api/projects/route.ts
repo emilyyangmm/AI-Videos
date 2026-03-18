@@ -5,7 +5,7 @@ import { z } from "zod";
 // 创建项目的请求schema
 const createProjectSchema = z.object({
   industry: z.string().min(1),
-  scenario: z.string().optional(),      // 使用场景
+  merchantType: z.string().optional(),  // 商户类型
   videoDuration: z.number().optional(), // 视频时长（秒）
 });
 
@@ -17,16 +17,16 @@ export async function POST(request: NextRequest) {
 
     const client = getSupabaseClient();
     
-    // 构建项目数据，将场景和时长信息存储在 industry_analysis 中
+    // 构建项目数据，将商户类型和时长信息存储在 industry_analysis 中
     const projectData: any = {
       industry: validatedData.industry,
       status: "draft",
     };
     
-    // 如果有场景和时长信息，存储到 industry_analysis
-    if (validatedData.scenario || validatedData.videoDuration) {
+    // 如果有商户类型和时长信息，存储到 industry_analysis
+    if (validatedData.merchantType || validatedData.videoDuration) {
       projectData.industry_analysis = {
-        scenario: validatedData.scenario,
+        merchantType: validatedData.merchantType,
         videoDuration: validatedData.videoDuration,
       };
     }

@@ -2,29 +2,38 @@ import { NextRequest, NextResponse } from "next/server";
 import { LLMClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
 
-// 场景配置
-const SCENARIO_CONFIG: Record<string, { focus: string; style: string }> = {
+// 商户类型配置
+const MERCHANT_TYPE_CONFIG: Record<string, { focus: string; style: string; recommendedElements: string }> = {
   ecommerce: {
     focus: "产品卖点、痛点解决方案、前后对比效果",
-    style: "快节奏、直击痛点、强转化导向"
+    style: "快节奏、直击痛点、强转化导向",
+    recommendedElements: "成本+人群+最差"
   },
   local_business: {
     focus: "瞬间吸引力、环境氛围、优惠活动",
-    style: "生活化、真实感、引流导向"
+    style: "生活化、真实感、引流导向",
+    recommendedElements: "人群+猎奇+怀旧"
   },
-  brand_story: {
-    focus: "情感共鸣、人设建立、故事转折",
-    style: "剧情化、情感丰富、深度内容"
+  brand_owner: {
+    focus: "品牌认知、情怀故事、品质感",
+    style: "剧情化、情感丰富、品质感",
+    recommendedElements: "头牌效应+反差+荷尔蒙"
   },
-  tutorial: {
-    focus: "实用技巧、清晰步骤、知识点输出",
-    style: "专业、易懂、干货导向"
+  knowledge_blogger: {
+    focus: "实用技巧、专业信任、知识点输出",
+    style: "专业、易懂、干货导向",
+    recommendedElements: "猎奇+成本+头牌效应"
+  },
+  story_ip: {
+    focus: "人设建立、情感共鸣、剧情内容",
+    style: "剧情化、人设鲜明、情绪共鸣",
+    recommendedElements: "反差+荷尔蒙+怀旧"
   }
 };
 
 const SYSTEM_PROMPT = `你是一位专业的短视频爆款内容策划专家，精通薛辉短视频架构方法论。
 
-你需要根据用户提供的行业、使用场景和视频时长，推荐3组爆款词根组合。
+你需要根据用户提供的行业、商户类型和视频时长，推荐3组爆款词根组合。
 
 八大爆款元素维度：
 1. 成本维度：省钱、省时、省力、一招搞定、平替、白嫖
@@ -37,7 +46,7 @@ const SYSTEM_PROMPT = `你是一位专业的短视频爆款内容策划专家，
 8. 荷尔蒙驱动：找对象、脱单、渣男/女鉴别、分手、前任、夫妻关系
 
 推荐原则：
-- 根据使用场景选择最合适的词根组合
+- 根据商户类型选择最合适的词根组合方向
 - 根据视频时长控制信息密度
 - 每组组合包含2-3个不同维度的词根
 - 确保词根之间有化学反应和冲突感
@@ -49,7 +58,7 @@ const SYSTEM_PROMPT = `你是一位专业的短视频爆款内容策划专家，
     {
       "id": 1,
       "elements": ["维度1:词根", "维度2:词根", "维度3:词根"],
-      "description": "推荐理由说明（需结合场景和时长说明为何推荐此组合）",
+      "description": "推荐理由说明（需结合商户类型和时长说明为何推荐此组合）",
       "example": "具体示例标题",
       "suitableFor": "适合的具体场景"
     }
@@ -61,10 +70,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { projectId, industry, industryAnalysis } = body;
     
-    // 获取场景和时长信息
-    const scenario = industryAnalysis?.scenario || "ecommerce";
+    // 获取商户类型和时长信息
+    const merchantType = industryAnalysis?.merchantType || "ecommerce";
     const videoDuration = industryAnalysis?.videoDuration || 30;
-    const scenarioConfig = SCENARIO_CONFIG[scenario] || SCENARIO_CONFIG.ecommerce;
+    const merchantConfig = MERCHANT_TYPE_CONFIG[merchantType] || MERCHANT_TYPE_CONFIG.ecommerce;
 
     if (!projectId || !industry) {
       return NextResponse.json(
@@ -82,14 +91,14 @@ export async function POST(request: NextRequest) {
       {
         role: "user" as const,
         content: `行业：${industry}
-使用场景：${scenario}（${scenarioConfig.focus}）
-推荐风格：${scenarioConfig.style}
+商户类型：${merchantType}（${merchantConfig.focus}）
+推荐元素方向：${merchantConfig.recommendedElements}
+推荐风格：${merchantConfig.style}
 视频时长：${videoDuration}秒
-赛道分析：${JSON.stringify(industryAnalysis, null, 2)}
 
-请根据以上信息，推荐3组最适合该场景和时长的爆款词根组合。注意：
+请根据以上信息，推荐3组最适合该商户类型和时长的爆款词根组合。注意：
 1. 时长${videoDuration <= 30 ? '较短，需要更直接、更有冲击力的词根' : '适中，可以包含更多故事性元素'}
-2. 场景是${scenario}，需要聚焦于${scenarioConfig.focus}`,
+2. 商户类型是${merchantType}，核心目标是${merchantConfig.focus}`,
       },
     ];
 
