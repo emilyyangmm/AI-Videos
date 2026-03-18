@@ -1482,7 +1482,22 @@ export default function Home() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-sm mt-1 text-gray-600">{shot.veoPrompt}</p>
+                                    <div className="mt-2 space-y-2">
+                                      {typeof shot.veoPrompt === 'object' && shot.veoPrompt !== null ? (
+                                        <>
+                                          <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                                            <span className="text-xs text-gray-500">中文：</span>
+                                            <p className="text-sm">{shot.veoPrompt.chinese}</p>
+                                          </div>
+                                          <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                            <span className="text-xs text-gray-500">English：</span>
+                                            <p className="text-sm">{shot.veoPrompt.english}</p>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <p className="text-sm mt-1 text-gray-600">{shot.veoPrompt}</p>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -1533,19 +1548,52 @@ export default function Home() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-4">
                       {shotScript.shots.map((shot: any, index: number) => (
-                        <div key={index} className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline" className="text-xs">分镜{index + 1}</Badge>
-                            <span className="text-xs text-gray-500">{shot.duration}秒</span>
-                          </div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{shot.visual}</p>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Badge variant="secondary" className="text-xs">
+                        <div key={index} className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-purple-100 dark:border-purple-800">
+                          <div className="flex items-center gap-3 mb-3">
+                            <Badge className="bg-purple-600 text-white">镜头 S{String(index + 1).padStart(2, '0')}</Badge>
+                            <span className="text-sm text-gray-500">{shot.duration}秒</span>
+                            <Badge variant="outline" className="text-xs">
                               {shot.type === 'opening' ? '🎬 开头' : shot.type === 'ending' ? '🎯 结尾' : '📝 内容'}
                             </Badge>
                           </div>
+                          
+                          {/* 中文描述 */}
+                          <div className="mb-2">
+                            <span className="text-xs font-medium text-purple-600">中文：</span>
+                            <p className="text-sm text-gray-800 dark:text-gray-200 mt-1 leading-relaxed">
+                              {shot.visual}
+                            </p>
+                          </div>
+                          
+                          {/* 英文描述（veoPrompt） */}
+                          {shot.veoPrompt && (
+                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                              <span className="text-xs font-medium text-blue-600">English：</span>
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                                {typeof shot.veoPrompt === 'object' ? shot.veoPrompt.english || shot.veoPrompt.chinese : shot.veoPrompt}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* 台词 */}
+                          {shot.dialogue && (
+                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                              <span className="text-xs font-medium text-pink-600">台词：</span>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 italic">
+                                "{typeof shot.dialogue === 'object' ? shot.dialogue.chinese || shot.dialogue.english : shot.dialogue}"
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* 运镜提示 */}
+                          {shot.cameraHint && (
+                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                              <Video className="w-3 h-3" />
+                              <span>运镜：{shot.cameraHint}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
