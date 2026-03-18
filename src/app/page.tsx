@@ -679,6 +679,7 @@ export default function Home() {
         body: JSON.stringify({
           projectId: project.id,
           shots: shotsToGenerate,
+          materials: materials, // 传递用户上传的素材
           aspectRatio: "16:9",
         }),
       });

@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
     const projectId = formData.get("projectId") as string;
     const type = formData.get("type") as string;
     const description = formData.get("description") as string;
+    const shotIndex = formData.get("shotIndex") as string | null;
+    const category = formData.get("category") as string | null;
     const file = formData.get("file") as File | null;
     const url = formData.get("url") as string | null;
 
@@ -24,6 +26,8 @@ export async function POST(request: NextRequest) {
       project_id: projectId,
       type,
       description,
+      shot_index: shotIndex ? parseInt(shotIndex) : null,
+      category: category,
     };
 
     if (file && (type === "image" || type === "video")) {
