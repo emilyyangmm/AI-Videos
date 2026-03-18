@@ -1,21 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
-import { insertProjectSchema } from "@/storage/database/shared/schema";
 import { z } from "zod";
+
+// 创建项目的请求schema
+const createProjectSchema = z.object({
+  industry: z.string().min(1),
+  scenario: z.string().optional(),      // 使用场景
+  videoDuration: z.number().optional(), // 视频时长（秒）
+});
 
 // 创建新项目
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const validatedData = insertProjectSchema.parse(body);
+    const validatedData = createProjectSchema.parse(body);
 
     const client = getSupabaseClient();
+    
+    // 构建项目数据，将场景和时长信息存储在 industry_analysis 中
+    const projectData: any = {
+      industry: validatedData.industry,
+      status: "draft",
+    };
+    
+    // 如果有场景和时长信息，存储到 industry_analysis
+    if (validatedData.scenario || validatedData.videoDuration) {
+      projectData.industry_analysis = {
+        scenario: validatedData.scenario,
+        videoDuration: validatedData.videoDuration,
+      };
+    }
+
     const { data, error } = await client
       .from("projects")
-      .insert({
-        industry: validatedData.industry,
-        status: "draft",
-      })
+      .insert(projectData)
       .select()
       .single();
 

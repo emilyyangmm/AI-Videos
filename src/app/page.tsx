@@ -8,9 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Target, Sparkles, Lightbulb, Upload, FileText, Video, Film,
+  Target, Sparkles, Lightbulb, Upload, FileText, Video, Film, Clock,
   CheckCircle2, Loader2, ChevronRight, RefreshCw,
-  Play, Download, Trash2, Plus, Clock
+  Play, Download, Trash2, Plus
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,13 +62,53 @@ interface Script {
 }
 
 const STEPS = [
-  { id: 1, title: "锁定赛道", icon: Target, description: "分析行业与目标人群" },
+  { id: 1, title: "场景设定", icon: Target, description: "选择使用场景和时长" },
   { id: 2, title: "爆款词根", icon: Sparkles, description: "生成词根组合推荐" },
   { id: 3, title: "爆款选题", icon: Lightbulb, description: "生成爆款选题方案" },
   { id: 4, title: "素材上传", icon: Upload, description: "上传相关素材" },
   { id: 5, title: "脚本生成", icon: FileText, description: "生成基础脚本" },
-  { id: 6, title: "分镜脚本", icon: FileText, description: "按8秒拆分分镜" },
+  { id: 6, title: "分镜脚本", icon: Film, description: "按8秒拆分分镜" },
   { id: 7, title: "视频生成", icon: Video, description: "Veo生成视频" },
+];
+
+// 使用场景配置
+const SCENARIOS = [
+  {
+    id: "ecommerce",
+    title: "电商产品展示",
+    icon: "🛍️",
+    description: "淘宝、抖音小店等电商平台产品展示",
+    recommendedDuration: [15, 45],
+    reason: "淘宝官方数据：过长会拖累完播率权重。15秒足够展示痛点+解决方案+前后对比。前3秒决定80%流量池等级。",
+    tips: ["前3秒必须抓住眼球", "突出痛点与解决方案", "展示前后对比效果"]
+  },
+  {
+    id: "local_business",
+    title: "实体店引流",
+    icon: "🏪",
+    description: "餐饮、美业、本地生活等实体店推广",
+    recommendedDuration: [15, 30],
+    reason: "TikTok/Reels算法建议：一个清晰的信息点+快速证明。适合展示美食出锅瞬间、环境氛围、优惠活动。",
+    tips: ["展示最吸引人的瞬间", "突出环境氛围", "展示优惠活动"]
+  },
+  {
+    id: "brand_story",
+    title: "品牌故事/剧情类",
+    icon: "🎬",
+    description: "建立人设、情感共鸣的内容",
+    recommendedDuration: [35, 55],
+    reason: "抖音剧情类爆款集中区间：刚好完成起承转合——3秒钩子、22秒转折、48秒反转。超60秒流失率明显增加。",
+    tips: ["3秒钩子抓住观众", "设置转折点", "结尾反转或情感升华"]
+  },
+  {
+    id: "tutorial",
+    title: "实用干货/教程类",
+    icon: "📚",
+    description: "美妆教程、产品使用方法等教学内容",
+    recommendedDuration: [30, 60],
+    reason: "足够讲清楚2-3个核心步骤。每增加1个信息点延长8秒左右。",
+    tips: ["步骤清晰易懂", "每步控制在8秒内", "突出关键操作点"]
+  }
 ];
 
 export default function Home() {
@@ -76,6 +116,10 @@ export default function Home() {
   const [project, setProject] = useState<Project | null>(null);
   const [industry, setIndustry] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // 使用场景和视频时长
+  const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(30);
   
   // 各步骤数据
   const [industryAnalysis, setIndustryAnalysis] = useState<any>(null);
@@ -94,13 +138,22 @@ export default function Home() {
       return;
     }
 
+    if (!selectedScenario) {
+      toast.error("请先选择使用场景");
+      return;
+    }
+
     setLoading(true);
     try {
-      // 创建项目
+      // 创建项目（包含场景和时长信息）
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ industry }),
+        body: JSON.stringify({ 
+          industry,
+          scenario: selectedScenario,
+          videoDuration,
+        }),
       });
       const data = await res.json();
       
@@ -132,12 +185,18 @@ export default function Home() {
       const data = await res.json();
       
       if (data.success) {
-        setIndustryAnalysis(data.analysis);
+        // 合并场景和时长信息到分析结果中
+        const analysisWithMeta = {
+          ...data.analysis,
+          scenario: selectedScenario,
+          videoDuration: videoDuration,
+        };
+        setIndustryAnalysis(analysisWithMeta);
         setCurrentStep(2);
         toast.success("赛道分析完成！");
         
         // 自动生成词根组合
-        await generateWordRoots(projectId, data.analysis);
+        await generateWordRoots(projectId, analysisWithMeta);
       } else {
         toast.error(data.error || "分析失败");
       }
@@ -198,6 +257,8 @@ export default function Home() {
             projectId: project.id,
             industry,
             wordRootCombination: selected.combination,
+            scenario: selectedScenario,
+            videoDuration: videoDuration,
           }),
         });
         const data = await res.json();
@@ -230,6 +291,8 @@ export default function Home() {
           projectId: project.id,
           industry,
           wordRootCombination: selected.combination,
+          scenario: selectedScenario,
+          videoDuration: videoDuration,
         }),
       });
       const data = await res.json();
@@ -674,62 +737,154 @@ export default function Home() {
 
         {/* 步骤内容 */}
         <div className="max-w-4xl mx-auto">
-          {/* 步骤1: 锁定赛道 */}
+          {/* 步骤1: 场景设定 */}
           {currentStep === 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="w-5 h-5 text-purple-600" />
-                  第1步：锁定赛道
-                </CardTitle>
-                <CardDescription>
-                  输入您的行业/赛道，系统将分析目标人群特征和变现方式
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">您的行业/领域是什么？</label>
-                  <Input
-                    placeholder="例如：职场、教育、美妆、母婴、健身、美食、情感、科技..."
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleStartProject()}
-                    className="text-lg"
-                  />
-                </div>
-                
-                <div className="flex gap-2 flex-wrap">
-                  {["职场", "教育", "美妆", "母婴", "健身", "美食", "情感", "科技"].map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-purple-100"
-                      onClick={() => setIndustry(tag)}
+            <div className="space-y-6">
+              {/* 场景选择 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-purple-600" />
+                    选择使用场景
+                  </CardTitle>
+                  <CardDescription>
+                    根据您的使用场景，系统会推荐最合适的视频时长和内容结构
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {SCENARIOS.map((scenario) => (
+                      <div
+                        key={scenario.id}
+                        onClick={() => {
+                          setSelectedScenario(scenario.id);
+                          setVideoDuration(scenario.recommendedDuration[0]);
+                        }}
+                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          selectedScenario === scenario.id
+                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                            : "border-gray-200 hover:border-purple-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-2xl">{scenario.icon}</span>
+                          <h4 className="font-medium">{scenario.title}</h4>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          {scenario.description}
+                        </p>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Clock className="w-4 h-4 text-purple-600" />
+                          <span className="text-purple-600 font-medium">
+                            推荐 {scenario.recommendedDuration[0]}-{scenario.recommendedDuration[1]}秒
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 时长选择和行业输入 */}
+              {selectedScenario && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-purple-600" />
+                      设置视频时长
+                    </CardTitle>
+                    <CardDescription>
+                      {SCENARIOS.find(s => s.id === selectedScenario)?.reason}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* 时长滑块 */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">视频时长</span>
+                        <Badge variant="secondary" className="text-lg px-3 py-1">
+                          {videoDuration} 秒
+                        </Badge>
+                      </div>
+                      <input
+                        type="range"
+                        min={SCENARIOS.find(s => s.id === selectedScenario)?.recommendedDuration[0]}
+                        max={SCENARIOS.find(s => s.id === selectedScenario)?.recommendedDuration[1]}
+                        value={videoDuration}
+                        onChange={(e) => setVideoDuration(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{SCENARIOS.find(s => s.id === selectedScenario)?.recommendedDuration[0]}秒</span>
+                        <span>{SCENARIOS.find(s => s.id === selectedScenario)?.recommendedDuration[1]}秒</span>
+                      </div>
+                    </div>
+
+                    {/* 分镜数量提示 */}
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        📹 预计生成 <strong>{Math.ceil(videoDuration / 8)} 个分镜</strong>（每分镜8秒）
+                      </p>
+                    </div>
+
+                    {/* 行业输入 */}
+                    <div className="space-y-2 pt-4 border-t">
+                      <label className="text-sm font-medium">您的行业/领域是什么？</label>
+                      <Input
+                        placeholder="例如：职场、教育、美妆、母婴、健身、美食、情感、科技..."
+                        value={industry}
+                        onChange={(e) => setIndustry(e.target.value)}
+                        onKeyPress={(e) => e.key === "Enter" && handleStartProject()}
+                        className="text-lg"
+                      />
+                      
+                      <div className="flex gap-2 flex-wrap">
+                        {["职场", "教育", "美妆", "母婴", "健身", "美食", "情感", "科技"].map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="cursor-pointer hover:bg-purple-100"
+                            onClick={() => setIndustry(tag)}
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleStartProject}
+                      disabled={loading || !industry.trim()}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                     >
-                      {tag}
-                    </Badge>
-                  ))}
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          正在分析...
+                        </>
+                      ) : (
+                        "开始生成"
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* 空状态提示 */}
+              {!selectedScenario && (
+                <div className="text-center py-8">
+                  <Target className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                  <p className="text-gray-600">请先选择一个使用场景</p>
                 </div>
+              )}
 
-                <Button
-                  onClick={handleStartProject}
-                  disabled={loading || !industry.trim()}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      正在分析...
-                    </>
-                  ) : (
-                    "开始分析"
-                  )}
-                </Button>
-
-                {industryAnalysis && (
-                  <div className="mt-6 space-y-4">
-                    <h3 className="font-semibold text-lg">📊 赛道分析结果</h3>
-                    
+              {/* 赛道分析结果 */}
+              {industryAnalysis && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>📊 赛道分析结果</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-purple-50 dark:bg-gray-800 rounded-lg">
                         <h4 className="font-medium mb-2">目标人群</h4>
@@ -747,10 +902,10 @@ export default function Home() {
                         </ul>
                       </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {/* 步骤2: 爆款词根 */}
