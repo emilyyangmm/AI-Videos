@@ -61,6 +61,7 @@ interface Script {
   middle_content: any[];
   ending_guide: any;
   shot_list: any[];
+  materialUsagePlan?: string;
 }
 
 const STEPS = [
@@ -394,6 +395,8 @@ export default function Home() {
   };
 
   // 生成脚本
+  const [materialAnalysis, setMaterialAnalysis] = useState<any[]>([]);
+  
   const generateScript = async () => {
     if (!project) return;
     const selectedTopic = topics.find(t => t.is_selected);
@@ -405,6 +408,13 @@ export default function Home() {
 
     setLoading(true);
     try {
+      // 准备素材数据
+      const materialsData = materials.map(m => ({
+        type: m.type,
+        uri: m.url,
+        description: m.description || '',
+      }));
+
       const res = await fetch("/api/scripts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -412,13 +422,18 @@ export default function Home() {
           projectId: project.id,
           topic: selectedTopic,
           wordRoots: selectedWordRoot.combination,
-          materials,
+          materials: materialsData,
+          merchantType: selectedMerchantType,
+          videoDuration: videoDuration,
         }),
       });
       const data = await res.json();
       
       if (data.success) {
         setScript(data.script);
+        if (data.materialAnalysis && data.materialAnalysis.length > 0) {
+          setMaterialAnalysis(data.materialAnalysis);
+        }
         setCurrentStep(5);
         toast.success("脚本生成完成！");
       }
@@ -1122,209 +1137,440 @@ export default function Home() {
 
           {/* 步骤3: 爆款选题 */}
           {currentStep === 3 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-purple-600" />
-                  第3步：爆款选题
-                </CardTitle>
-                <CardDescription>
-                  选择一个选题进行脚本创作
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button
-                  variant="outline"
-                  onClick={refreshTopics}
-                  disabled={loading}
-                  className="mb-4"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  换一批
-                </Button>
-
-                {topics.map((topic) => (
-                  <div
-                    key={topic.id}
-                    onClick={() => selectTopic(topic.id)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      topic.is_selected
-                        ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                        : "border-gray-200 hover:border-purple-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">{topic.title}</h4>
-                      {topic.is_selected && <CheckCircle2 className="w-5 h-5 text-purple-600" />}
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <p><span className="font-medium text-gray-500">冲突点：</span>{topic.conflict_point}</p>
-                      <p><span className="font-medium text-gray-500">情绪钩子：</span>{topic.emotion_hook}</p>
-                    </div>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lightbulb className="w-5 h-5 text-purple-600" />
+                    第3步：选择爆款选题
+                  </CardTitle>
+                  <CardDescription>
+                    每个选题包含7种不同风格的标题变体，点击展开查看详情
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="text-sm">
+                      💡 提示：每个选题的主标题是综合7种风格的最佳选择
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      onClick={refreshTopics}
+                      disabled={loading}
+                      size="sm"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      换一批
+                    </Button>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+
+                  {topics.map((topic: any, topicIndex: number) => (
+                    <Card
+                      key={topic.id}
+                      className={`overflow-hidden transition-all cursor-pointer ${
+                        topic.is_selected
+                          ? "border-purple-500 ring-2 ring-purple-500/20"
+                          : "border-gray-200 hover:border-purple-300"
+                      }`}
+                      onClick={() => selectTopic(topic.id)}
+                    >
+                      {/* 选题头部 */}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge className="bg-purple-600">选题 {topicIndex + 1}</Badge>
+                              {topic.is_selected && (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                  已选择
+                                </Badge>
+                              )}
+                            </div>
+                            <h4 className="text-lg font-semibold">{topic.title}</h4>
+                          </div>
+                          {topic.is_selected && (
+                            <CheckCircle2 className="w-6 h-6 text-purple-600" />
+                          )}
+                        </div>
+                        
+                        {/* 核心冲突和情绪钩子 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                            <span className="text-xs text-purple-600 font-medium">💥 核心冲突</span>
+                            <p className="text-sm mt-1">{topic.conflict_point}</p>
+                          </div>
+                          <div className="p-3 bg-pink-50 dark:bg-pink-900/20 rounded-lg">
+                            <span className="text-xs text-pink-600 font-medium">🎭 情绪钩子</span>
+                            <p className="text-sm mt-1">{topic.emotion_hook}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 7种风格变体 */}
+                      {topic.styleVariants && topic.styleVariants.length > 0 && (
+                        <div className="border-t bg-gray-50/50 dark:bg-gray-800/50">
+                          <div className="p-3">
+                            <p className="text-xs font-medium text-gray-500 mb-3">
+                              🎨 7种风格标题变体（点击查看详情）
+                            </p>
+                            <div className="space-y-2">
+                              {topic.styleVariants.map((variant: any, vIndex: number) => (
+                                <div
+                                  key={vIndex}
+                                  className="p-3 bg-white dark:bg-gray-800 rounded-lg border hover:shadow-md transition-shadow"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <Badge 
+                                      variant="outline" 
+                                      className="shrink-0 text-xs"
+                                      style={{
+                                        borderColor: 
+                                          variant.styleId === 'suspense' ? '#f59e0b' :
+                                          variant.styleId === 'authority' ? '#3b82f6' :
+                                          variant.styleId === 'trend' ? '#ec4899' :
+                                          variant.styleId === 'contrast' ? '#ef4444' :
+                                          variant.styleId === 'tutorial' ? '#10b981' :
+                                          variant.styleId === 'pain' ? '#8b5cf6' :
+                                          variant.styleId === 'emotion' ? '#f97316' : '#6b7280'
+                                      }}
+                                    >
+                                      {variant.styleName}
+                                    </Badge>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">{variant.title}</p>
+                                      <div className="mt-2 flex gap-2 text-xs text-gray-500">
+                                        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
+                                          冲突：{variant.conflict}
+                                        </span>
+                                        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
+                                          情绪：{variant.emotion}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* 步骤4: 素材上传 */}
           {currentStep === 4 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="w-5 h-5 text-purple-600" />
-                  第4步：素材上传
-                </CardTitle>
-                <CardDescription>
-                  上传相关素材（图片/视频），用于脚本创作参考
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                  <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-sm text-gray-600 mb-4">
-                    点击或拖拽文件上传
-                  </p>
-                  <Input
-                    type="file"
-                    accept="image/*,video/*"
-                    onChange={handleUploadMaterial}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <Button asChild>
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      <Plus className="w-4 h-4 mr-2" />
-                      选择文件
-                    </label>
-                  </Button>
-                </div>
-
-                {materials.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {materials.map((mat) => (
-                      <div key={mat.id} className="relative group">
-                        <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                          {mat.type === "image" ? (
-                            <img src={mat.url} alt={mat.description || ""} className="w-full h-full object-cover" />
-                          ) : (
-                            <video src={mat.url} className="w-full h-full object-cover" />
-                          )}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-purple-600" />
+                    第4步：上传宣传素材
+                  </CardTitle>
+                  <CardDescription>
+                    根据你想要宣传的内容上传相关素材，AI将分析素材并融入脚本创作
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* 素材上传指南 */}
+                  <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg">
+                    <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                      <Lightbulb className="w-4 h-4 text-blue-600" />
+                      建议上传的素材类型
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">📦</span>
+                        <div>
+                          <span className="font-medium">产品展示</span>
+                          <p className="text-xs text-gray-500">产品包装、外观细节、多角度展示</p>
                         </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">✨</span>
+                        <div>
+                          <span className="font-medium">使用效果</span>
+                          <p className="text-xs text-gray-500">使用过程、效果对比、前后变化</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">🏪</span>
+                        <div>
+                          <span className="font-medium">店铺/环境</span>
+                          <p className="text-xs text-gray-500">门店外观、内部环境、氛围展示</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg">👤</span>
+                        <div>
+                          <span className="font-medium">人物素材</span>
+                          <p className="text-xs text-gray-500">人设展示、口播视频、剧情片段</p>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      💡 提示：上传的素材会在脚本中智能标注使用位置，帮助AI理解你的宣传重点
+                    </p>
+                  </div>
+
+                  {/* 上传区域 */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-sm text-gray-600 mb-2">
+                      点击或拖拽文件上传
+                    </p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      支持图片（JPG/PNG）和视频（MP4/MOV）格式
+                    </p>
+                    <Input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={handleUploadMaterial}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <Button asChild>
+                      <label htmlFor="file-upload" className="cursor-pointer">
+                        <Plus className="w-4 h-4 mr-2" />
+                        选择文件
+                      </label>
+                    </Button>
+                  </div>
+
+                  {/* 已上传素材 */}
+                  {materials.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">已上传素材 ({materials.length}个)</h4>
                         <Button
-                          variant="destructive"
+                          variant="ghost"
                           size="sm"
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setMaterials([])}
+                          className="text-red-500 hover:text-red-600"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          清空
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button
-                  onClick={generateScript}
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      生成脚本中...
-                    </>
-                  ) : (
-                    "生成脚本"
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {materials.map((mat, index) => (
+                          <div key={mat.id} className="relative group">
+                            <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                              {mat.type === "image" ? (
+                                <img src={mat.url} alt={mat.description || ""} className="w-full h-full object-cover" />
+                              ) : (
+                                <video src={mat.url} className="w-full h-full object-cover" />
+                              )}
+                            </div>
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMaterials(prev => prev.filter(m => m.id !== mat.id));
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">
+                              素材 {index + 1}: {mat.type === 'image' ? '图片' : '视频'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </Button>
-              </CardContent>
-            </Card>
+
+                  {/* 素材分析说明 */}
+                  {materials.length > 0 && (
+                    <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        AI将分析你的素材并在脚本中标注使用位置
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={generateScript}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        分析素材并生成脚本中...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4 mr-2" />
+                        {materials.length > 0 ? '分析素材并生成脚本' : '生成脚本（无素材）'}
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* 步骤5: 脚本生成 */}
           {currentStep === 5 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                  第5步：脚本确认
-                </CardTitle>
-                <CardDescription>
-                  查看生成的脚本，确认后生成视频
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {script && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">{script.title}</h3>
-                      <Badge>{script.duration}秒</Badge>
-                    </div>
+            <div className="space-y-6">
+              {/* 素材分析结果 */}
+              {materialAnalysis.length > 0 && (
+                <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <span className="text-green-600">📊</span> 素材分析结果
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {materialAnalysis.map((mat) => (
+                      <div key={mat.index} className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            素材{mat.index} · {mat.type}
+                          </Badge>
+                          {mat.suggestedScene && (
+                            <Badge className="text-xs bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200">
+                              建议场景：{mat.suggestedScene}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{mat.description}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
-                    <div className="space-y-4">
-                      <div className="p-4 bg-purple-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2">🎬 开头3秒钩子</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {script.opening_hook?.visual}
-                        </p>
-                        <p className="text-sm mt-2 italic">
-                          "{script.opening_hook?.script}"
-                        </p>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-purple-600" />
+                    第5步：脚本确认
+                  </CardTitle>
+                  <CardDescription>
+                    查看生成的脚本，脚本已根据你的素材和宣传重点进行定制
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {script && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold">{script.title}</h3>
+                          <p className="text-sm text-gray-500">人设：{script.persona || '根据商户类型自动生成'}</p>
+                        </div>
+                        <Badge className="text-lg px-3 py-1">{script.duration}秒</Badge>
                       </div>
 
-                      <div className="p-4 bg-pink-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2">📝 中间内容</h4>
-                        {script.middle_content?.map((section: any, i: number) => (
-                          <div key={i} className="mb-3">
-                            <p className="font-medium text-sm">{section.section}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">{section.visual}</p>
-                            <p className="text-sm italic">"{section.script}"</p>
+                      <div className="space-y-4">
+                        <div className="p-4 bg-purple-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <span>🎬</span> 开头3秒钩子
+                              {script.opening_hook?.materialRef && (
+                                <Badge variant="outline" className="text-xs">
+                                  使用：{script.opening_hook.materialRef}
+                                </Badge>
+                              )}
+                            </h4>
                           </div>
-                        ))}
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {script.opening_hook?.visual}
+                          </p>
+                          <p className="text-sm mt-2 italic text-purple-700 dark:text-purple-300">
+                            "{script.opening_hook?.script}"
+                          </p>
+                        </div>
+
+                        <div className="p-4 bg-pink-50 dark:bg-gray-800 rounded-lg">
+                          <h4 className="font-medium mb-3">📝 中间内容</h4>
+                          {script.middle_content?.map((section: any, i: number) => (
+                            <div key={i} className="mb-4 pb-4 border-b border-pink-200 dark:border-pink-800 last:border-0 last:mb-0 last:pb-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-medium text-sm text-pink-600">{section.section}</p>
+                                {section.materialRef && (
+                                  <Badge variant="outline" className="text-xs">
+                                    使用：{section.materialRef}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{section.visual}</p>
+                              <p className="text-sm mt-1 italic text-gray-700 dark:text-gray-300">"{section.script}"</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="p-4 bg-orange-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <span>🎯</span> 结尾引导
+                              {script.ending_guide?.materialRef && (
+                                <Badge variant="outline" className="text-xs">
+                                  使用：{script.ending_guide.materialRef}
+                                </Badge>
+                              )}
+                            </h4>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {script.ending_guide?.visual}
+                          </p>
+                          <p className="text-sm mt-2 italic text-orange-700 dark:text-orange-300">
+                            "{script.ending_guide?.cta}"
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="p-4 bg-orange-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2">🎯 结尾引导</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {script.ending_guide?.visual}
-                        </p>
-                        <p className="text-sm mt-2 italic">
-                          "{script.ending_guide?.cta}"
-                        </p>
-                      </div>
-                    </div>
+                      {/* 素材使用总览 */}
+                      {script.materialUsagePlan && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            <span className="font-medium">📋 素材使用总览：</span>
+                            {script.materialUsagePlan}
+                          </p>
+                        </div>
+                      )}
 
-                    <div className="flex gap-3">
-                      <Button
-                        onClick={generateShotScript}
-                        disabled={loading}
-                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            生成分镜脚本中...
-                          </>
-                        ) : (
-                          <>
-                            <Film className="w-4 h-4 mr-2" />
-                            生成分镜脚本
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        onClick={generateVideos}
-                        variant="outline"
-                        className="border-purple-500 text-purple-600 hover:bg-purple-50"
-                      >
-                        <Video className="w-4 h-4 mr-2" />
-                        直接生成视频
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                      <div className="flex gap-3">
+                        <Button
+                          onClick={generateShotScript}
+                          disabled={loading}
+                          className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              生成分镜脚本中...
+                            </>
+                          ) : (
+                            <>
+                              <Film className="w-4 h-4 mr-2" />
+                              生成分镜脚本
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          onClick={generateVideos}
+                          variant="outline"
+                          className="border-purple-500 text-purple-600 hover:bg-purple-50"
+                        >
+                          <Video className="w-4 h-4 mr-2" />
+                          直接生成视频
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* 步骤6: 视频生成 */}
