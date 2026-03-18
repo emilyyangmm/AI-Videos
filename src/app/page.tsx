@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Target, Sparkles, Lightbulb, Upload, FileText, Video, 
+  Target, Sparkles, Lightbulb, Upload, FileText, Video, Film,
   CheckCircle2, Loader2, ChevronRight, RefreshCw,
   Play, Download, Trash2, Plus, Clock
 } from "lucide-react";
@@ -66,8 +66,9 @@ const STEPS = [
   { id: 2, title: "爆款词根", icon: Sparkles, description: "生成词根组合推荐" },
   { id: 3, title: "爆款选题", icon: Lightbulb, description: "生成爆款选题方案" },
   { id: 4, title: "素材上传", icon: Upload, description: "上传相关素材" },
-  { id: 5, title: "脚本生成", icon: FileText, description: "生成逐镜脚本" },
-  { id: 6, title: "视频生成", icon: Video, description: "AI生成视频" },
+  { id: 5, title: "脚本生成", icon: FileText, description: "生成基础脚本" },
+  { id: 6, title: "分镜脚本", icon: FileText, description: "按8秒拆分分镜" },
+  { id: 7, title: "视频生成", icon: Video, description: "Veo生成视频" },
 ];
 
 export default function Home() {
@@ -82,6 +83,8 @@ export default function Home() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [script, setScript] = useState<Script | null>(null);
+  const [shotScript, setShotScript] = useState<any>(null); // 分镜脚本
+  const [optimizedShots, setOptimizedShots] = useState<any[]>([]); // 优化后的分镜
   const [videos, setVideos] = useState<any[]>([]);
 
   // 创建项目并开始
@@ -317,73 +320,220 @@ export default function Home() {
     }
   };
 
-  // Veo 视频生成状态
-  const [veoOperations, setVeoOperations] = useState<Map<string, { status: string; progress: number; videoUrl?: string }>>(new Map());
-  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-
-  // 提交 Veo 视频生成任务
-  const generateVideos = async () => {
-    if (!project || !script) return;
+  // 生成分镜脚本（按8秒拆分）
+  const generateShotScript = async () => {
+    if (!script) {
+      toast.error("请先生成基础脚本");
+      return;
+    }
 
     setLoading(true);
     try {
-      // 将分镜转换为Veo提示词
-      const shots = script.shot_list?.flatMap((scene: any) => 
-        scene.shots.map((shot: any) => ({
-          ...shot,
-          duration: parseInt(shot.duration) || 8,
-          veoPrompt: `${shot.visual}, ${scene.colorTone} tone, professional camera movement, cinematic quality`,
-        }))
-      ) || [];
+      const res = await fetch("/api/scripts/shots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project?.id,
+          script,
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setShotScript(data.shotScript);
+        setCurrentStep(6);
+        toast.success(`分镜脚本生成完成！共 ${data.shotScript.shotCount} 个分镜`);
+      } else {
+        toast.error(data.error || "分镜脚本生成失败");
+      }
+    } catch (error) {
+      toast.error("分镜脚本生成失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 优化Veo提示词
+  const optimizeVeoPrompts = async () => {
+    if (!shotScript || !shotScript.shots) {
+      toast.error("请先生成分镜脚本");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/veo/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shots: shotScript.shots,
+          aspectRatio: "16:9",
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setOptimizedShots(data.shots);
+        toast.success(`提示词优化完成！${data.shotCount} 个分镜已准备就绪`);
+      } else {
+        toast.error(data.error || "提示词优化失败");
+      }
+    } catch (error) {
+      toast.error("提示词优化失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 直接生成视频（从基础脚本）
+  const generateVideos = async () => {
+    if (!script || !project) {
+      toast.error("请先生成基础脚本");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 将基础脚本转换为简化的分镜格式
+      const shots: any[] = [];
+      
+      // 开头
+      if (script.opening_hook) {
+        shots.push({
+          shotId: "opening",
+          type: "opening",
+          duration: 8,
+          visual: script.opening_hook.visual,
+          dialogue: script.opening_hook.script,
+          veoPrompt: `${script.opening_hook.visual}, cinematic, professional camera movement, high quality`,
+        });
+      }
+      
+      // 中间内容
+      if (script.middle_content) {
+        script.middle_content.forEach((section: any, index: number) => {
+          shots.push({
+            shotId: `middle-${index}`,
+            type: "content",
+            duration: 8,
+            visual: section.visual,
+            dialogue: section.script,
+            veoPrompt: `${section.visual}, cinematic, professional camera movement, high quality`,
+          });
+        });
+      }
+      
+      // 结尾
+      if (script.ending_guide) {
+        shots.push({
+          shotId: "ending",
+          type: "ending",
+          duration: 8,
+          visual: script.ending_guide.visual,
+          dialogue: script.ending_guide.cta,
+          veoPrompt: `${script.ending_guide.visual}, cinematic, professional camera movement, high quality`,
+        });
+      }
 
       if (shots.length === 0) {
         toast.error("没有可生成的分镜");
         return;
       }
 
-      // 为每个分镜提交任务
-      const newOperations = new Map(veoOperations);
+      // 提交批量生成
+      const res = await fetch("/api/veo/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          shots: shots,
+          aspectRatio: "16:9",
+        }),
+      });
+      const data = await res.json();
       
-      for (let i = 0; i < shots.length; i++) {
-        const shot = shots[i];
-        
-        const res = await fetch("/api/veo/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId: project.id,
-            prompt: shot.veoPrompt,
-            duration: Math.min(shot.duration, 8), // Veo最大支持8秒
-            aspectRatio: "16:9",
-            shotIndex: i,
-          }),
+      if (data.success) {
+        // 初始化所有任务状态
+        const newOperations = new Map(veoOperations);
+        data.results.forEach((r: any) => {
+          if (r.success && r.operationName) {
+            newOperations.set(r.operationName, {
+              status: "processing",
+              progress: 5,
+              shotId: r.shotId,
+            });
+            startPolling(r.operationName, r.shotId);
+          }
         });
         
-        const data = await res.json();
-        
-        if (data.success && data.operation_name) {
-          newOperations.set(data.operation_name, {
-            status: "processing",
-            progress: 5,
-          });
-          
-          // 开始轮询
-          startPolling(data.operation_name, i);
-        }
+        setVeoOperations(newOperations);
+        setCurrentStep(7);
+        toast.success(`已提交 ${shots.length} 个视频生成任务`);
+      } else {
+        toast.error(data.error || "提交失败");
       }
-      
-      setVeoOperations(newOperations);
-      setCurrentStep(6);
-      toast.success(`已提交 ${shots.length} 个视频生成任务`);
     } catch (error) {
-      toast.error("视频生成失败");
+      toast.error("视频生成提交失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Veo 视频生成状态
+  const [veoOperations, setVeoOperations] = useState<Map<string, { status: string; progress: number; videoUrl?: string; shotId?: string }>>(new Map());
+  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // 提交 Veo 视频生成任务（批量）
+  const submitVeoTasks = async () => {
+    const shotsToGenerate = optimizedShots.length > 0 ? optimizedShots : shotScript?.shots;
+    
+    if (!project || !shotsToGenerate || shotsToGenerate.length === 0) {
+      toast.error("没有可生成的分镜");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/veo/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          shots: shotsToGenerate,
+          aspectRatio: "16:9",
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // 初始化所有任务状态
+        const newOperations = new Map(veoOperations);
+        data.results.forEach((r: any) => {
+          if (r.success && r.operationName) {
+            newOperations.set(r.operationName, {
+              status: "processing",
+              progress: 5,
+              shotId: r.shotId,
+            });
+            startPolling(r.operationName, r.shotId);
+          }
+        });
+        
+        setVeoOperations(newOperations);
+        setCurrentStep(7);
+        toast.success(data.message);
+      } else {
+        toast.error(data.error || "提交失败");
+      }
+    } catch (error) {
+      toast.error("提交失败");
     } finally {
       setLoading(false);
     }
   };
 
   // 轮询任务状态
-  const startPolling = (operationName: string, shotIndex: number) => {
+  const startPolling = (operationName: string, shotId?: string) => {
     const poll = async () => {
       try {
         const res = await fetch(`/api/veo/generate?operation_name=${encodeURIComponent(operationName)}`);
@@ -391,7 +541,7 @@ export default function Home() {
         
         setVeoOperations(prev => {
           const newMap = new Map(prev);
-          const current = newMap.get(operationName) || { status: "processing", progress: 5 };
+          const current = newMap.get(operationName) || { status: "processing", progress: 5, shotId };
           
           if (data.done) {
             if (data.success) {
@@ -399,23 +549,25 @@ export default function Home() {
                 status: "completed",
                 progress: 100,
                 videoUrl: data.video_url || data.gcs_uri,
+                shotId,
               });
               
               // 添加到视频列表
               setVideos(v => [...v, {
-                shotIndex,
+                shotId,
                 operationName,
                 videoUrl: data.video_url || data.gcs_uri,
                 success: true,
               }]);
               
-              toast.success(`分镜 ${shotIndex + 1} 视频生成完成`);
+              toast.success(`分镜 ${shotId} 视频生成完成`);
             } else {
               newMap.set(operationName, {
                 status: "failed",
                 progress: 0,
+                shotId,
               });
-              toast.error(`分镜 ${shotIndex + 1} 生成失败: ${data.error}`);
+              toast.error(`分镜 ${shotId} 生成失败: ${data.error}`);
             }
             
             // 停止轮询
@@ -819,23 +971,33 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <Button
-                      onClick={generateVideos}
-                      disabled={loading}
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          生成视频中...
-                        </>
-                      ) : (
-                        <>
-                          <Video className="w-4 h-4 mr-2" />
-                          生成视频
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={generateShotScript}
+                        disabled={loading}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            生成分镜脚本中...
+                          </>
+                        ) : (
+                          <>
+                            <Film className="w-4 h-4 mr-2" />
+                            生成分镜脚本
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={generateVideos}
+                        variant="outline"
+                        className="border-purple-500 text-purple-600 hover:bg-purple-50"
+                      >
+                        <Video className="w-4 h-4 mr-2" />
+                        直接生成视频
+                      </Button>
+                    </div>
                   </>
                 )}
               </CardContent>
@@ -847,8 +1009,126 @@ export default function Home() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
+                  <Film className="w-5 h-5 text-purple-600" />
+                  第6步：分镜脚本
+                </CardTitle>
+                <CardDescription>
+                  按8秒拆分的分镜脚本，支持编辑和优化提示词
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* 分镜列表 */}
+                {shotScript && shotScript.shots.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-medium">{shotScript.title}</h3>
+                        <p className="text-sm text-gray-500">总时长: {shotScript.totalDuration}秒 · {shotScript.shotCount} 个分镜</p>
+                      </div>
+                      <Button
+                        onClick={optimizeVeoPrompts}
+                        disabled={loading || optimizedShots.length > 0}
+                        variant="outline"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        {optimizedShots.length > 0 ? "提示词已优化" : "优化提示词"}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {(optimizedShots.length > 0 ? optimizedShots : shotScript.shots).map((shot: any, index: number) => (
+                        <div key={shot.shotId || index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary">分镜 {index + 1}</Badge>
+                              <span className="text-sm text-gray-500">{shot.duration}秒</span>
+                            </div>
+                            <Badge variant={shot.type === 'opening' ? 'default' : shot.type === 'ending' ? 'destructive' : 'outline'}>
+                              {shot.type === 'opening' ? '开头' : shot.type === 'ending' ? '结尾' : '内容'}
+                            </Badge>
+                          </div>
+
+                          <div className="space-y-3">
+                            {/* 画面描述 */}
+                            <div>
+                              <label className="text-xs font-medium text-gray-500">画面描述</label>
+                              <p className="text-sm mt-1">{shot.visual}</p>
+                            </div>
+
+                            {/* 台词 */}
+                            <div>
+                              <label className="text-xs font-medium text-gray-500">台词</label>
+                              <p className="text-sm mt-1 italic">"{shot.dialogue}"</p>
+                            </div>
+
+                            {/* Veo提示词 */}
+                            {(shot.veoPrompt || shot.optimizedPrompts) && (
+                              <div className="mt-3 pt-3 border-t">
+                                <label className="text-xs font-medium text-purple-600">Veo 提示词</label>
+                                {shot.optimizedPrompts ? (
+                                  <div className="mt-2 space-y-2">
+                                    <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                                      <span className="text-xs text-gray-500">中文：</span>
+                                      <p className="text-sm">{shot.optimizedPrompts.chinese}</p>
+                                    </div>
+                                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                      <span className="text-xs text-gray-500">English：</span>
+                                      <p className="text-sm">{shot.optimizedPrompts.english}</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm mt-1 text-gray-600">{shot.veoPrompt}</p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 运镜提示 */}
+                            {shot.cameraHint && (
+                              <div className="text-xs text-gray-500 flex items-center gap-1">
+                                <Video className="w-3 h-3" />
+                                {shot.cameraHint}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      onClick={submitVeoTasks}
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          提交中...
+                        </>
+                      ) : (
+                        <>
+                          <Video className="w-4 h-4 mr-2" />
+                          提交视频生成任务
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <Film className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600">请先在步骤5生成基础脚本后，点击"生成分镜脚本"</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 步骤7: 视频生成 */}
+          {currentStep === 7 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <Video className="w-5 h-5 text-purple-600" />
-                  第6步：视频生成 (Google Veo 3.1)
+                  第7步：视频生成 (Google Veo 3.1)
                 </CardTitle>
                 <CardDescription>
                   AI正在生成您的爆款短视频
@@ -876,7 +1156,7 @@ export default function Home() {
                     {Array.from(veoOperations.entries()).map(([opName, op], index) => (
                       <div key={opName} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium">分镜 {index + 1}</span>
+                          <span className="font-medium">分镜 {op.shotId || index + 1}</span>
                           <Badge variant={
                             op.status === "completed" ? "default" : 
                             op.status === "failed" ? "destructive" : "secondary"
@@ -915,7 +1195,7 @@ export default function Home() {
                           )}
                           <div className="absolute bottom-2 left-2">
                             <Badge variant="secondary">
-                              分镜 {video.shotIndex + 1}
+                              分镜 {video.shotId || i + 1}
                             </Badge>
                           </div>
                         </div>

@@ -104,87 +104,162 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 /**
- * 提交 Veo 视频生成任务
+ * Veo 视频生成API
+ * 
+ * POST: 批量提交视频生成任务
+ * - 接收优化后的分镜列表（每个8秒）
+ * - 为每个分镜创建Veo任务
+ * - 返回所有operation_name供轮询
+ * 
+ * GET: 查询单个任务状态
+ * - 轮询视频生成状态
+ * - 返回完成后的视频URL
+ */
+
+/**
+ * 提交 Veo 视频生成任务（批量）
  * POST /api/veo/generate
+ * 
+ * Body: {
+ *   projectId: string,
+ *   shots: [{
+ *     shotId: string,
+ *     veoPrompt: { chinese: string, english: string },
+ *     audioPrompt: { chinese: string, english: string },
+ *     parameters: { aspectRatio, duration, generateAudio }
+ *   }]
+ * }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, duration = 8, aspectRatio = "16:9", projectId, shotIndex } = body;
+    const { projectId, shots, aspectRatio = "16:9" } = body;
 
-    if (!prompt) {
-      return NextResponse.json({ success: false, error: "请输入提示词" }, { status: 400 });
+    // 验证参数
+    if (!projectId) {
+      return NextResponse.json(
+        { success: false, error: "缺少 projectId" },
+        { status: 400 }
+      );
     }
 
-    // Veo 只支持 4/6/8 秒
-    const validDuration = [4, 6, 8].includes(duration) ? duration : 8;
+    if (!shots || !Array.isArray(shots) || shots.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "缺少 shots 数组或数组为空" },
+        { status: 400 }
+      );
+    }
 
     const token = await getAccessToken();
     if (!token) {
       return NextResponse.json(
-        { success: false, error: "认证失败，请检查服务账号凭证" },
+        { success: false, error: "认证失败，请检查服务账号凭证。确保设置了 GOOGLE_APPLICATION_CREDENTIALS 环境变量。" },
         { status: 500 }
       );
     }
 
-    const payload = {
-      instances: [{ prompt }],
-      parameters: {
-        aspectRatio,
-        durationSeconds: validDuration,
-        outputConfig: {
-          gcsDestination: {
-            outputUriPrefix: GCS_OUTPUT,
+    // 批量提交任务
+    const results = [];
+    
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i];
+      
+      // 使用英文提示词（Veo要求）
+      const prompt = shot.veoPrompt?.english || shot.veoPrompt?.chinese || "";
+      
+      if (!prompt) {
+        results.push({
+          shotIndex: i,
+          shotId: shot.shotId,
+          success: false,
+          error: "缺少提示词",
+        });
+        continue;
+      }
+
+      // 固定8秒时长
+      const duration = 8;
+      
+      const payload = {
+        instances: [{ prompt }],
+        parameters: {
+          aspectRatio: shot.parameters?.aspectRatio || aspectRatio,
+          durationSeconds: duration,
+          outputConfig: {
+            gcsDestination: {
+              outputUriPrefix: GCS_OUTPUT,
+            },
           },
         },
-      },
-    };
+      };
 
-    console.log("🚀 提交 Veo 请求:", VEO_GENERATE_URL);
+      console.log(`🚀 提交分镜 ${i + 1}/${shots.length}:`, prompt.slice(0, 100));
+      
+      try {
+        const response = await fetch(VEO_GENERATE_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const responseText = await response.text();
+        
+        if (!response.ok) {
+          results.push({
+            shotIndex: i,
+            shotId: shot.shotId,
+            success: false,
+            error: `HTTP ${response.status}: ${responseText.slice(0, 200)}`,
+          });
+          continue;
+        }
+
+        const data = JSON.parse(responseText);
+        const operationName = data.name;
+
+        // 保存到数据库
+        const supabaseClient = getSupabaseClient();
+        await supabaseClient.from("videos").insert({
+          project_id: projectId,
+          status: "processing",
+          veo_operation_id: operationName,
+          duration: duration,
+        });
+
+        results.push({
+          shotIndex: i,
+          shotId: shot.shotId,
+          success: true,
+          operationName,
+          prompt: prompt.slice(0, 100) + "...",
+        });
+
+        console.log(`✅ 分镜 ${i + 1} 任务已提交:`, operationName);
+        
+      } catch (error) {
+        results.push({
+          shotIndex: i,
+          shotId: shot.shotId,
+          success: false,
+          error: String(error),
+        });
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
     
-    const response = await fetch(VEO_GENERATE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    console.log(`📊 Veo 响应 ${response.status}:`, responseText.slice(0, 300));
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { success: false, error: `HTTP ${response.status}: ${responseText}` },
-        { status: response.status }
-      );
-    }
-
-    const data = JSON.parse(responseText);
-    const operationName = data.name;
-
-    console.log("✅ Veo 任务已提交:", operationName);
-
-    // 保存到数据库
-    if (projectId) {
-      const supabaseClient = getSupabaseClient();
-      await supabaseClient.from("videos").insert({
-        project_id: projectId,
-        status: "processing",
-        veo_operation_id: operationName,
-        duration: validDuration,
-      });
-    }
-
     return NextResponse.json({
       success: true,
-      operation_name: operationName,
-      message: "任务已提交，请轮询状态",
-      shotIndex, // 返回分镜索引用于前端追踪
+      message: `成功提交 ${successCount}/${shots.length} 个视频生成任务`,
+      totalShots: shots.length,
+      successCount,
+      results,
     });
   } catch (error) {
-    console.error("❌ Veo 请求异常:", error);
+    console.error("❌ Veo 批量生成异常:", error);
     return NextResponse.json(
       { success: false, error: String(error) },
       { status: 500 }
