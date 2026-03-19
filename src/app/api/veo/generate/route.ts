@@ -105,12 +105,22 @@ async function getAccessToken(): Promise<string | null> {
 
 /**
  * 获取图片并转为 base64
+ * 支持相对路径和绝对路径
  */
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
-    const response = await fetch(url);
+    // 处理相对路径：服务端fetch需要完整URL
+    let fetchUrl = url;
+    if (url.startsWith('/api/') || url.startsWith('/public/')) {
+      // 使用当前服务运行的端口
+      const port = process.env.DEPLOY_RUN_PORT || '5000';
+      fetchUrl = `http://localhost:${port}${url}`;
+      console.log(`[fetchImageAsBase64] 相对路径转换为: ${fetchUrl}`);
+    }
+    
+    const response = await fetch(fetchUrl);
     if (!response.ok) {
-      console.error("获取图片失败:", response.status);
+      console.error("获取图片失败:", response.status, fetchUrl);
       return null;
     }
     const arrayBuffer = await response.arrayBuffer();
