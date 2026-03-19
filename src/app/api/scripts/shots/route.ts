@@ -170,8 +170,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建用户输入
-    // 计算middle_content段落数量
-    const middleContentCount = Array.isArray(script.middle_content) ? script.middle_content.length : 0;
+    // 兼容驼峰和下划线两种格式的字段名
+    const openingHook = script.opening_hook || script.openingHook || {};
+    const middleContent = script.middle_content || script.middleContent || [];
+    const endingGuide = script.ending_guide || script.endingGuide || {};
+    const middleContentCount = Array.isArray(middleContent) ? middleContent.length : 0;
     
     const userInput = `
 ## 原始脚本信息
@@ -185,13 +188,13 @@ export async function POST(request: NextRequest) {
 ## 【三段式结构】
 
 ### 一、开头钩子（opening_hook）- 1段
-${JSON.stringify(script.opening_hook, null, 2)}
+${JSON.stringify(openingHook, null, 2)}
 
 ### 二、中间内容（middle_content）- ${middleContentCount}段
-${JSON.stringify(script.middle_content, null, 2)}
+${JSON.stringify(middleContent, null, 2)}
 
 ### 三、结尾引导（ending_guide）- 1段
-${JSON.stringify(script.ending_guide, null, 2)}
+${JSON.stringify(endingGuide, null, 2)}
 
 ---
 
