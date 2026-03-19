@@ -112,8 +112,8 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
     // 处理相对路径：服务端fetch需要完整URL
     let fetchUrl = url;
     if (url.startsWith('/api/') || url.startsWith('/public/')) {
-      // 使用当前服务运行的端口
-      const port = process.env.DEPLOY_RUN_PORT || '5000';
+      // 使用当前服务运行的端口（优先级：PORT > DEPLOY_RUN_PORT > 默认3001）
+      const port = process.env.PORT || process.env.DEPLOY_RUN_PORT || '3001';
       fetchUrl = `http://localhost:${port}${url}`;
       console.log(`[fetchImageAsBase64] 相对路径转换为: ${fetchUrl}`);
     }
