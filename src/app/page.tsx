@@ -792,6 +792,7 @@ export default function Home() {
     : 0;
   
   const completedCount = Array.from(veoOperations.values()).filter(op => op.status === "completed").length;
+  const failedCount = Array.from(veoOperations.values()).filter(op => op.status === "failed").length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -1370,7 +1371,7 @@ export default function Home() {
                         <div className="p-4 bg-purple-50 dark:bg-gray-800 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="font-medium flex items-center gap-2">
-                              <span>🎬</span> 开头3秒钩子
+                              <span>🎬</span> 开头钩子（4秒）
                             </h4>
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -1872,7 +1873,7 @@ export default function Home() {
                         </Button>
                         <Button
                           onClick={submitVeoTasks}
-                          disabled={loading || materials.length === 0}
+                          disabled={loading}
                           className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
                         >
                           {loading ? (
@@ -1990,14 +1991,17 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 进入剪辑按钮 */}
-                {completedCount === veoOperations.size && veoOperations.size > 0 && (
+                {/* 进入剪辑按钮 - 只要有成功生成的视频就可以进入 */}
+                {(completedCount > 0 || failedCount > 0) && veoOperations.size > 0 && (
                   <Button 
                     className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
                     onClick={() => setCurrentStepWithTrack(8)}
                   >
                     <Play className="w-4 h-4 mr-2" />
                     进入视频剪辑
+                    {failedCount > 0 && (
+                      <span className="ml-2 text-yellow-200">({failedCount}个失败)</span>
+                    )}
                   </Button>
                 )}
               </CardContent>
@@ -2127,11 +2131,11 @@ export default function Home() {
                           <div>
                             <span className="text-sm font-medium text-green-700">视频信息</span>
                             <p className="text-xs text-green-600 mt-1">
-                              共 {videos.length} 个片段 · 预估时长 {videos.reduce((sum: number, v: any) => sum + (v.duration || 5), 0)} 秒
+                              共 {videos.length} 个片段 · 预估时长 {videos.reduce((sum: number, v: any) => sum + (v.duration || 4), 0)} 秒
                             </p>
                           </div>
                           <Badge variant="outline" className="text-green-700">
-                            16:9 格式
+                            {aspectRatio} 格式
                           </Badge>
                         </div>
                       </div>
@@ -2147,9 +2151,35 @@ export default function Home() {
                           返回视频生成
                         </Button>
                         <Button
-                          onClick={() => {
-                            toast.success("开始合成最终视频...");
-                            // 这里调用剪辑API
+                          onClick={async () => {
+                            if (!project || videos.length === 0) {
+                              toast.error("没有可合成的视频");
+                              return;
+                            }
+                            
+                            setLoading(true);
+                            try {
+                              const res = await fetch("/api/videos/concat", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  projectId: project.id,
+                                  videos: videos
+                                })
+                              });
+                              
+                              const data = await res.json();
+                              
+                              if (data.success) {
+                                toast.success(`视频合成完成！共 ${data.totalVideos} 个片段，总时长 ${data.totalDuration} 秒`);
+                              } else {
+                                toast.error(data.error || "视频合成失败");
+                              }
+                            } catch (error) {
+                              toast.error("视频合成失败");
+                            } finally {
+                              setLoading(false);
+                            }
                           }}
                           disabled={loading}
                           className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
