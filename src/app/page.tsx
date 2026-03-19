@@ -740,13 +740,18 @@ export default function Home() {
                 shotId,
               });
               
-              // 添加到视频列表
-              setVideos(v => [...v, {
-                shotId,
-                operationName,
-                videoUrl: data.video_url || data.gcs_uri,
-                success: true,
-              }]);
+              // 添加到视频列表（去重：检查operationName是否已存在）
+              setVideos(v => {
+                if (v.some(video => video.operationName === operationName)) {
+                  return v; // 已存在，不重复添加
+                }
+                return [...v, {
+                  shotId,
+                  operationName,
+                  videoUrl: data.video_url || data.gcs_uri,
+                  success: true,
+                }];
+              });
               
               toast.success(`分镜 ${shotId} 视频生成完成`);
             } else {
@@ -1917,6 +1922,33 @@ export default function Home() {
                           )}
                         </Button>
                       </div>
+
+                      {/* 合成结果预览 */}
+                      {mergedVideo && (
+                        <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200">
+                          <h4 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5" />
+                            视频合成完成
+                          </h4>
+                          <div className="aspect-video bg-black rounded-lg overflow-hidden max-w-xl mx-auto">
+                            <video 
+                              src={mergedVideo} 
+                              controls 
+                              className="w-full h-full"
+                            />
+                          </div>
+                          <div className="mt-3 flex gap-2 justify-center">
+                            <a
+                              href={mergedVideo}
+                              download
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                            >
+                              <Download className="w-4 h-4" />
+                              下载视频
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-center py-12">
