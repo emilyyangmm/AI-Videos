@@ -1480,8 +1480,14 @@ export default function Home() {
                                 镜头 S{String(index + 1).padStart(2, '0')}
                               </Badge>
                               <span className="text-sm text-gray-500 font-medium">{shot.duration}秒</span>
-                              <Badge variant={shot.type === 'opening' ? 'default' : shot.type === 'ending' ? 'destructive' : 'secondary'}>
-                                {shot.type === 'opening' ? '🎬 开头' : shot.type === 'ending' ? '🎯 结尾' : '📝 内容'}
+                              <Badge variant={
+                                shot.scriptSection === 'opening_hook' ? 'default' : 
+                                shot.scriptSection === 'ending_guide' ? 'destructive' : 
+                                'secondary'
+                              }>
+                                {shot.scriptSection === 'opening_hook' ? '🎬 开头钩子' : 
+                                 shot.scriptSection === 'ending_guide' ? '🎯 结尾引导' : 
+                                 '📝 中间内容'}
                               </Badge>
                               {shot.sceneTitle && (
                                 <span className="text-sm text-gray-600 ml-auto">{shot.sceneTitle}</span>
@@ -1677,42 +1683,54 @@ export default function Home() {
                       {/* 智能素材需求分析 */}
                       <div className="space-y-4">
                         {shotScript.shots.map((shot: any, index: number) => {
-                          // 从分镜内容提取素材需求
-                          const shotText = [
-                            shot.description?.visual,
-                            shot.veoPrompt?.chinese,
-                            shot.sceneTitle,
-                            shot.location
-                          ].filter(Boolean).join(' ');
+                          // 优先使用API返回的materialNeeds，否则使用智能fallback
+                          let materialNeeds: { icon: string; label: string; desc: string; required?: boolean }[] = [];
                           
-                          // 分析需要的素材类型
-                          const materialNeeds: { icon: string; label: string; desc: string }[] = [];
-                          
-                          if (shotText.includes('柜台') || shotText.includes('收银') || shotText.includes('cashier')) {
-                            materialNeeds.push({ icon: '🏪', label: '柜台场景', desc: '收银台、柜台全景' });
-                          }
-                          if (shotText.includes('试妆') || shotText.includes(' makeup') || shotText.includes('化妆')) {
-                            materialNeeds.push({ icon: '💄', label: '试妆区域', desc: '自助试妆区、化妆台' });
-                          }
-                          if (shotText.includes('产品') || shotText.includes('product') || shotText.includes('口红') || shotText.includes('眼影')) {
-                            materialNeeds.push({ icon: '📦', label: '产品展示', desc: '产品包装、外观细节' });
-                          }
-                          if (shotText.includes('门店') || shotText.includes('店铺') || shotText.includes('store') || shotText.includes('entrance')) {
-                            materialNeeds.push({ icon: '🚪', label: '门店外观', desc: '店铺门头、入口环境' });
-                          }
-                          if (shotText.includes('人物') || shotText.includes('老板') || shotText.includes('员工') || shotText.includes('female boss') || shotText.includes('人')) {
-                            materialNeeds.push({ icon: '👤', label: '人物素材', desc: '人设展示、动作表情' });
-                          }
-                          if (shotText.includes('环境') || shotText.includes('内部') || shotText.includes('interior')) {
-                            materialNeeds.push({ icon: '🏢', label: '店内环境', desc: '店内布置、氛围展示' });
-                          }
-                          if (shotText.includes('折扣') || shotText.includes('优惠') || shotText.includes('sign') || shotText.includes('price')) {
-                            materialNeeds.push({ icon: '🏷️', label: '促销物料', desc: '折扣牌、价格标签' });
-                          }
-                          
-                          // 如果没有识别到特定需求，添加通用素材需求
-                          if (materialNeeds.length === 0) {
-                            materialNeeds.push({ icon: '🎬', label: `分镜${index + 1}素材`, desc: '与该场景相关的视频或图片' });
+                          if (shot.materialNeeds && Array.isArray(shot.materialNeeds) && shot.materialNeeds.length > 0) {
+                            // 使用API返回的素材需求
+                            materialNeeds = shot.materialNeeds.map((need: any) => ({
+                              icon: need.type === '人物素材' ? '👤' :
+                                    need.type === '产品素材' ? '📦' :
+                                    need.type === '环境素材' ? '🏢' :
+                                    need.type === '门店外观' ? '🚪' :
+                                    need.type === '产品展示' ? '🛍️' :
+                                    need.type === '促销物料' ? '🏷️' :
+                                    need.type === '试妆区域' ? '💄' :
+                                    need.type === '柜台场景' ? '🏪' : '🎬',
+                              label: need.type,
+                              desc: need.description || '',
+                              required: need.required
+                            }));
+                          } else {
+                            // 智能fallback：从分镜内容提取素材需求
+                            const shotText = [
+                              shot.description?.visual,
+                              shot.veoPrompt?.chinese,
+                              shot.sceneTitle,
+                              shot.dialogue?.chinese
+                            ].filter(Boolean).join(' ');
+                            
+                            // 根据内容关键词分析素材需求
+                            if (shotText.includes('人物') || shotText.includes('达人') || shotText.includes('老板') || shotText.includes('员工') || shotText.includes('人') || shotText.includes('展示')) {
+                              materialNeeds.push({ icon: '👤', label: '人物素材', desc: '人设展示、动作表情' });
+                            }
+                            if (shotText.includes('蛋糕') || shotText.includes('咖啡') || shotText.includes('产品') || shotText.includes('甜品') || shotText.includes('美食')) {
+                              materialNeeds.push({ icon: '📦', label: '产品素材', desc: '产品特写、外观细节' });
+                            }
+                            if (shotText.includes('店') || shotText.includes('环境') || shotText.includes('场景') || shotText.includes('内部')) {
+                              materialNeeds.push({ icon: '🏢', label: '环境素材', desc: '店内布置、氛围展示' });
+                            }
+                            if (shotText.includes('门头') || shotText.includes('入口') || shotText.includes('外观')) {
+                              materialNeeds.push({ icon: '🚪', label: '门店外观', desc: '店铺门头、入口环境' });
+                            }
+                            if (shotText.includes('二维码') || shotText.includes('团购') || shotText.includes('链接')) {
+                              materialNeeds.push({ icon: '🏷️', label: '转化素材', desc: '二维码、团购信息' });
+                            }
+                            
+                            // 如果没有识别到特定需求，添加通用素材需求
+                            if (materialNeeds.length === 0) {
+                              materialNeeds.push({ icon: '🎬', label: '场景素材', desc: '与该场景相关的视频或图片' });
+                            }
                           }
                           
                           return (
@@ -1721,10 +1739,27 @@ export default function Home() {
                               <div className="flex items-center gap-2 mb-3">
                                 <Badge className="bg-purple-600 text-white">镜头 S{String(index + 1).padStart(2, '0')}</Badge>
                                 <span className="text-xs text-gray-500">{shot.duration}秒</span>
+                                <Badge variant={
+                                  shot.scriptSection === 'opening_hook' ? 'default' : 
+                                  shot.scriptSection === 'ending_guide' ? 'destructive' : 
+                                  'secondary'
+                                }>
+                                  {shot.scriptSection === 'opening_hook' ? '🎬 开头钩子' : 
+                                   shot.scriptSection === 'ending_guide' ? '🎯 结尾引导' : 
+                                   '📝 中间内容'}
+                                </Badge>
                                 <span className="text-xs text-gray-400 truncate max-w-[200px]">
-                                  {shot.sceneTitle || shot.description?.visual?.slice(0, 30) || ''}...
+                                  {shot.sceneTitle || shot.description?.visual?.slice(0, 30) || ''}
                                 </span>
                               </div>
+                              
+                              {/* 分镜内容摘要 */}
+                              {shot.description?.visual && (
+                                <div className="mb-3 p-2 bg-white/50 dark:bg-gray-800/50 rounded text-xs text-gray-600">
+                                  <span className="font-medium">画面内容：</span>
+                                  {shot.description.visual}
+                                </div>
+                              )}
                               
                               {/* 所需素材类型 */}
                               <div className="space-y-3">
@@ -1734,8 +1769,8 @@ export default function Home() {
                                     <div className="flex-1">
                                       <div className="flex items-center justify-between">
                                         <span className="font-medium text-sm">{need.label}</span>
-                                        <Badge variant="outline" className="text-xs">
-                                          需上传
+                                        <Badge variant={need.required ? "destructive" : "outline"} className="text-xs">
+                                          {need.required ? '必需' : '可选'}
                                         </Badge>
                                       </div>
                                       <p className="text-xs text-gray-500 mt-1">{need.desc}</p>

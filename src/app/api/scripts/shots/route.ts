@@ -5,123 +5,165 @@ import { callLLM, HeaderUtils } from "@/lib/llm";
 /**
  * 分镜脚本生成API
  * 
- * 功能：
- * 1. 将30-60秒的脚本按8秒切片
- * 2. 为每个8秒片段生成完整的分镜脚本
- * 3. 输出格式符合Veo 3.1要求
+ * 核心逻辑：
+ * 1. 根据脚本的三段式结构（开头钩子 + 中间内容 + 结尾引导）智能拆分
+ * 2. 时长遵循Veo限制：支持4/6/8秒三种规格
+ * 3. 开头钩子固定4秒（抓住眼球）
+ * 4. 中间内容根据实际内容拆分为4-8秒片段
+ * 5. 结尾引导4-6秒（行动号召）
+ * 6. 每个分镜根据内容生成具体的素材需求提示
  */
 
-const SHOT_SCRIPT_PROMPT = `你是一位专业的短视频分镜脚本专家，精通将完整脚本拆分为精确的8秒分镜，并能为每个分镜生成符合Veo 3.1要求的高质量视频提示词。
+const SHOT_SCRIPT_PROMPT = `你是一位专业的短视频分镜脚本专家，精通将完整脚本拆分为精确的分镜片段，并能为每个分镜生成符合Veo要求的视频提示词。
 
-## 任务说明
-用户会提供一个完整的短视频脚本（30-60秒），你需要：
-1. 将脚本按8秒为一个片段进行拆分
-2. 每个8秒片段需要包含完整的画面描述、动作、台词
-3. 确保每个片段有明确的视觉焦点和情绪递进
-4. 为每个分镜生成符合Veo 3.1要求的英文提示词
+## 【核心任务】根据脚本三段式结构智能拆分分镜
 
-## Veo 3.1 视频提示词8大核心要素（必须包含）
-每个分镜的英文提示词（veoPrompt.english）必须包含以下要素：
+### 输入结构分析
+用户会提供一个完整脚本，包含：
+- opening_hook（开头钩子）：3-5秒，抓住眼球
+- middle_content（中间内容）：主体内容，多个段落
+- ending_guide（结尾引导）：3-5秒，行动号召
 
-1. **主体 (Subject)**: 视频中的对象、人物、动物或场景
-   - 示例: A young woman with curly hair, A golden retriever, A modern kitchen
+### 时长拆分规则（严格遵循Veo限制）
 
-2. **动作 (Action)**: 主体正在做的事情
-   - 示例: walking confidently, mixing ingredients, looking at camera and smiling
+**Veo支持的时长规格：4秒、6秒、8秒**
 
-3. **风格 (Style)**: 创意方向关键词
-   - 示例: cinematic, documentary style, vibrant colors, high contrast
+拆分逻辑：
+1. **开头钩子**：固定4秒
+   - 这是黄金开场，必须短小精悍
+   
+2. **中间内容**：根据实际段落数量和总时长分配
+   - 每个段落：4-8秒
+   - 如果总时长15秒，开头4秒，结尾4秒，中间7秒 → 拆分为1个4秒+1个3秒改为4秒
+   - 如果总时长30秒，开头4秒，结尾4秒，中间22秒 → 拆分为3个8秒或2个8秒+1个6秒
+   - **核心原则**：每个分镜尽量完整表达一个独立的内容单元
+   
+3. **结尾引导**：4-6秒
+   - 足够展示CTA（行动号召）
 
-4. **相机位置与运动 (Camera Movement)**: 
-   - 相机位置: aerial view, eye level, low angle, high angle
-   - 相机运动: static shot, tracking shot, pan left/right, zoom in/out, dolly shot
+### 15秒短视频拆分示例
+- 总时长15秒
+- 开头钩子：4秒
+- 中间内容：7秒 → 拆分为4秒+3秒（3秒不足4秒，调整为一个完整分镜）
+- 结尾引导：4秒
+- 最终：S01(4秒) + S02(4秒) + S03(4秒) + S04(3秒调为4秒) = 16秒，微调后15秒
 
-5. **构图 (Composition)**:
-   - 镜头类型: wide shot, medium shot, close-up, extreme close-up
-   - 构图方式: single shot, two shot, over-the-shoulder shot
+### 30秒短视频拆分示例
+- 总时长30秒
+- 开头钩子：4秒
+- 中间内容：20秒 → 可拆分为3个分镜（8秒+6秒+6秒）或（6秒+6秒+8秒）
+- 结尾引导：6秒
+- 最终：4个分镜，总时长约30秒
 
-6. **对焦与镜头效果 (Lens Effects)**:
-   - 景深: shallow depth of field, deep focus
-   - 效果: soft focus, sharp focus, macro lens, wide angle lens
+## 【素材需求生成规则】
 
-7. **氛围 (Atmosphere)**:
-   - 光线: natural lighting, golden hour, soft diffused light, dramatic shadows
-   - 色调: warm tones, cool tones, vibrant colors, muted palette
-   - 时间: morning, afternoon, sunset, night
+每个分镜必须根据其**具体内容**生成素材需求，**严禁使用固定模板**！
 
-8. **音频提示 (Audio)**: 对话、音效、环境噪声（可选）
-   - 对话使用引号: "Welcome to my channel!"
-   - 音效描述: gentle background music, city ambiance, nature sounds
+### 素材需求分析逻辑
+根据分镜内容提取关键元素：
+- 有人物出镜 → 需要人物素材（描述具体动作：比如"探店达人展示甜品"）
+- 有产品展示 → 需要产品素材（描述具体产品：比如"慕斯蛋糕、冰美式"）
+- 有环境场景 → 需要环境素材（描述具体场景：比如"甜品店内景"、"店铺门头"）
+- 有文字信息 → 需要文字素材（描述具体内容：比如"价格标签9.9元"、"店铺名称"）
 
-## 输出格式
-请以JSON格式返回，格式如下：
+### 素材需求格式
+\`\`\`json
 {
-  "totalDuration": 48,
-  "shotCount": 6,
-  "shots": [
+  "materialNeeds": [
     {
-      "shotId": "S01",
-      "startTime": "0:00",
-      "endTime": "0:08",
-      "duration": 8,
-      "sceneTitle": "场景标题",
-      "location": "具体地点",
-      "timeOfDay": "时间（早晨/中午/傍晚/夜晚）",
-      "colorTone": "主色调",
-      "description": {
-        "visual": "画面描述：谁+在哪+做什么动作+光线来向",
-        "action": "具体动作描述",
-        "emotion": "情绪基调"
-      },
-      "dialogue": {
-        "chinese": "中文台词或旁白",
-        "english": "英文翻译"
-      },
-      "audioPrompt": {
-        "soundEffects": ["音效1", "音效2"],
-        "backgroundMusic": "背景音乐风格",
-        "ambientSound": "环境音"
-      },
-      "veoPrompt": {
-        "chinese": "完整的中文视频描述提示词，包含所有要素",
-        "english": "Complete English video generation prompt that MUST include all 8 elements: subject, action, style, camera movement, composition, lens effects, atmosphere, and optionally audio. Should be detailed and specific, around 100-150 words."
-      },
-      "cameraWork": {
-        "movement": "相机运动方式",
-        "angle": "拍摄角度",
-        "shot": "镜头类型"
-      },
-      "style": "风格关键词",
-      "lens": "镜头效果",
-      "atmosphere": {
-        "time": "时间",
-        "color": "色调",
-        "lighting": "光线"
-      }
+      "type": "人物素材",
+      "description": "探店达人展示慕斯蛋糕和冰美式，热情的表情动作",
+      "suggestedDuration": "与分镜时长一致",
+      "required": true
+    },
+    {
+      "type": "产品素材",
+      "description": "高颜值慕斯蛋糕特写、冰美式咖啡",
+      "suggestedDuration": "2-3秒特写",
+      "required": false
     }
   ]
 }
+\`\`\`
 
-## 英文提示词撰写规范
-每个分镜的 veoPrompt.english 必须遵循以下结构：
-1. 开头：主体 + 正在做的动作（最关键信息）
-2. 中间：环境、光线、氛围描述
-3. 相机：相机位置、运动、镜头类型
-4. 效果：景深、焦点、特殊效果
-5. 风格：整体风格关键词
-6. 音频：如有对话或音效，最后说明
+## Veo 3.1 视频提示词8大核心要素（必须包含）
 
-示例：
-"A female beauty store owner in her 30s, wearing professional makeup, stands behind the counter of her modern cosmetic shop. She gestures elegantly while speaking to camera, natural light streams through large windows creating soft shadows. The camera uses a medium shot at eye level with a slow push-in movement. Shallow depth of field keeps focus on her face while the product shelves in background are slightly blurred. Cinematic style with warm, inviting color palette. Soft background music plays. She says 'Welcome to my shop' with a genuine smile."
+每个分镜的英文提示词必须包含以下要素：
+
+1. **主体 (Subject)**: 视频中的对象、人物、动物或场景
+2. **动作 (Action)**: 主体正在做的事情
+3. **风格 (Style)**: 创意方向关键词
+4. **相机位置与运动 (Camera Movement)**: 相机位置和运动方式
+5. **构图 (Composition)**: 镜头类型和构图方式
+6. **对焦与镜头效果 (Lens Effects)**: 景深、焦点效果
+7. **氛围 (Atmosphere)**: 光线、色调、时间
+8. **音频提示 (Audio)**: 对话、音效、环境噪声
+
+## 输出格式
+
+\`\`\`json
+{
+  "totalDuration": 15,
+  "shotCount": 3,
+  "scriptStructure": {
+    "openingDuration": 4,
+    "middleDuration": 7,
+    "endingDuration": 4
+  },
+  "shots": [
+    {
+      "shotId": "S01",
+      "scriptSection": "opening_hook",
+      "startTime": "0:00",
+      "endTime": "0:04",
+      "duration": 4,
+      "sceneTitle": "9.9元下午茶钩子展示",
+      "description": {
+        "visual": "堆满高颜值甜品、咖啡的托盘怼脸展示，镜头快速拉近",
+        "action": "镜头快速推向托盘，展示丰富甜品",
+        "emotion": "惊喜、吸引"
+      },
+      "dialogue": {
+        "chinese": "家人们！职场人专属9.9元下午茶来了！",
+        "english": "Guys! The exclusive 9.9 yuan afternoon tea for office workers is here!"
+      },
+      "audioPrompt": {
+        "soundEffects": ["轻快BGM渐入"],
+        "backgroundMusic": "职场解压电子音乐"
+      },
+      "veoPrompt": {
+        "chinese": "堆满高颜值慕斯蛋糕、冰美式的托盘，镜头快速推近，阳光从侧方打在食物上，营造诱人氛围。相机：怼脸特写快速推近。风格：活泼种草风。",
+        "english": "A tray piled with high-value mousse cake and iced Americano. Action: Camera quickly zooms in on the tray. Style: lively grass-planting style. Camera movement: extreme close-up with fast zoom in. Composition: food extreme close-up. Lens effects: sharp focus. Atmosphere: natural side lighting, warm tones, afternoon. Audio: upbeat background music starts."
+      },
+      "cameraWork": {
+        "movement": "快速推近",
+        "angle": "平视",
+        "shot": "极端特写"
+      },
+      "materialNeeds": [
+        {
+          "type": "产品素材",
+          "description": "高颜值慕斯蛋糕、冰美式咖啡托盘，侧光打在食物上",
+          "required": true
+        },
+        {
+          "type": "环境素材",
+          "description": "甜品店温馨环境背景（虚化）",
+          "required": false
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
 
 ## 重要规则
-1. 每个片段严格8秒
-2. 如果总时长不是8的倍数，最后一个片段可以是4-8秒
-3. 每个片段必须有完整的视觉和听觉元素
-4. veoPrompt.english 必须是完整的、专业的英文提示词，包含所有8大要素
-5. veoPrompt.chinese 必须是完整的中文描述，与英文版本对应
-6. 确保分镜之间有连贯性和过渡
-7. 英文提示词长度控制在100-150词之间
+1. **严格按脚本三段式结构拆分**：开头(4秒) + 中间(按内容拆分) + 结尾(4-6秒)
+2. **时长必须符合Veo规格**：每个分镜时长只能是4/6/8秒
+3. **素材需求必须根据内容生成**：严禁使用固定模板，必须分析每个分镜的具体内容
+4. **分镜之间要有连贯性**：情绪递进、视觉过渡自然
+5. **英文提示词要完整**：包含所有8大要素，100-150词
+6. **总时长控制**：所有分镜时长之和应接近脚本总时长（误差不超过2秒）
 `;
 
 export async function POST(request: NextRequest) {
@@ -146,16 +188,34 @@ export async function POST(request: NextRequest) {
 **核心冲突**: ${script.conflict}
 **情绪主线**: ${script.emotion_line}
 
-## 开头钩子
+---
+
+## 【三段式结构】
+
+### 一、开头钩子（opening_hook）
 ${JSON.stringify(script.opening_hook, null, 2)}
 
-## 中间内容
+### 二、中间内容（middle_content）
 ${JSON.stringify(script.middle_content, null, 2)}
 
-## 结尾引导
+### 三、结尾引导（ending_guide）
 ${JSON.stringify(script.ending_guide, null, 2)}
 
-请将以上脚本按8秒一个片段拆分为分镜脚本，每个分镜需要有完整的画面描述、台词和Veo提示词。
+---
+
+## 【拆分要求】
+
+请根据以上脚本的三段式结构，按照以下规则拆分分镜：
+
+1. **开头钩子**：固定4秒，抓住眼球
+2. **中间内容**：根据实际段落数量和内容拆分为4/6/8秒的片段
+3. **结尾引导**：4-6秒，行动号召
+
+**重要**：
+- 时长总和应接近${script.duration}秒
+- 每个分镜的时长只能是4/6/8秒（Veo限制）
+- 每个分镜必须根据具体内容生成素材需求（不要用固定模板）
+- 确保分镜之间有连贯性和情绪递进
 `;
 
     // 提取请求头
