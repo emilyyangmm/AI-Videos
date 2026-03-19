@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callLLM, HeaderUtils } from "@/lib/llm";
+import { callGemini, buildChatPrompt } from "@/lib/gemini";
 // import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // 商户类型配置
@@ -82,15 +82,9 @@ export async function POST(request: NextRequest) {
 
 请结合商户类型特点，给出针对性的分析结果。`;
 
-    // 提取请求头
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    
-    // 调用LLM
-    const responseText = await callLLM(
-      getSystemPrompt(merchantTypeKey),
-      userPrompt,
-      customHeaders,
-      { temperature: 0.7 }
+    // 调用Gemini
+    const responseText = await callGemini(
+      buildChatPrompt(getSystemPrompt(merchantTypeKey), userPrompt)
     );
 
     // 解析LLM返回的JSON

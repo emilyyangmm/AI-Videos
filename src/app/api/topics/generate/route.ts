@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callLLM, HeaderUtils } from "@/lib/llm";
+import { callGemini, buildChatPrompt } from "@/lib/gemini";
 // import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // 7种爆款标题风格定义
@@ -165,15 +165,9 @@ ${materialsInfo}
 
 请基于以上信息，生成3个完整的爆款选题方案，每个方案包含7种不同风格的标题变体。`;
 
-    // 提取请求头
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    
-    // 调用LLM
-    const responseText = await callLLM(
-      getSystemPrompt(merchantTypeKey, duration),
-      userPrompt,
-      customHeaders,
-      { temperature: 0.9 }
+    // 调用Gemini
+    const responseText = await callGemini(
+      buildChatPrompt(getSystemPrompt(merchantTypeKey, duration), userPrompt)
     );
 
     // 解析LLM返回的JSON
@@ -271,15 +265,9 @@ ${materialsInfo}
 
 请生成3个完全不同的爆款选题方案（与之前的不同），每个方案包含7种不同风格的标题变体。`;
 
-    // 提取请求头
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    
-    // 调用LLM
-    const responseText = await callLLM(
-      getSystemPrompt(merchantTypeKey, duration),
-      userPrompt,
-      customHeaders,
-      { temperature: 0.8 }
+    // 调用Gemini
+    const responseText = await callGemini(
+      buildChatPrompt(getSystemPrompt(merchantTypeKey, duration), userPrompt)
     );
 
     // 解析并保存新选题

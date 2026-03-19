@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callLLM, HeaderUtils } from "@/lib/llm";
+import { callGemini, buildChatPrompt } from "@/lib/gemini";
 // import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // 商户类型配置
@@ -230,15 +230,9 @@ ${Object.entries(ELEMENT_EMOTION_MAP).map(([k, v]) => `- ${k}：${v}`).join('\n'
 4. 确保每组组合来自至少2个不同维度
 5. 优先推荐冲突指数高的组合`;
 
-    // 提取请求头
-    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-    
-    // 调用LLM
-    const responseText = await callLLM(
-      SYSTEM_PROMPT,
-      userPrompt,
-      customHeaders,
-      { temperature: 0.7 }
+    // 调用Gemini
+    const responseText = await callGemini(
+      buildChatPrompt(SYSTEM_PROMPT, userPrompt)
     );
 
     // 解析LLM返回的JSON
