@@ -155,12 +155,14 @@ export default function Home() {
   const [industryAnalysis, setIndustryAnalysis] = useState<any>(null);
   const [wordRoots, setWordRoots] = useState<WordRoot[]>([]);
   const [wordRootAnalysis, setWordRootAnalysis] = useState<any>(null); // 词根分析过程
+  const [generatingWordRoots, setGeneratingWordRoots] = useState(false); // 词根生成中状态
   const [topics, setTopics] = useState<Topic[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [script, setScript] = useState<Script | null>(null);
   const [shotScript, setShotScript] = useState<any>(null); // 分镜脚本
   const [optimizedShots, setOptimizedShots] = useState<any[]>([]); // 优化后的分镜
   const [videos, setVideos] = useState<any[]>([]);
+  const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9"); // 视频宽高比
   
   // 追踪已访问的步骤，用于支持返回调整
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
@@ -262,7 +264,7 @@ export default function Home() {
 
   // 生成词根组合
   const generateWordRoots = async (projectId: string, analysis: any) => {
-    setLoading(true);
+    setGeneratingWordRoots(true);
     const actualIndustry = getActualIndustry();
     try {
       const res = await fetch("/api/word-roots/generate", {
@@ -291,7 +293,7 @@ export default function Home() {
     } catch (error) {
       toast.error("词根组合生成失败");
     } finally {
-      setLoading(false);
+      setGeneratingWordRoots(false);
     }
   };
 
@@ -521,8 +523,8 @@ export default function Home() {
       
       if (data.success) {
         setShotScript(data.shotScript);
-        setCurrentStepWithTrack(6);
-        toast.success(`分镜脚本生成完成！共 ${data.shotScript.shotCount} 个分镜`);
+        // 保持在步骤5让用户确认分镜，不自动跳转
+        toast.success(`分镜脚本生成完成！共 ${data.shotScript.shotCount} 个分镜，请查看确认`);
       } else {
         toast.error(data.error || "分镜脚本生成失败");
       }
@@ -681,7 +683,7 @@ export default function Home() {
           projectId: project.id,
           shots: shotsToGenerate,
           materials: materials, // 传递用户上传的素材
-          aspectRatio: "16:9",
+          aspectRatio: aspectRatio, // 使用选择的视频比例
         }),
       });
       const data = await res.json();
@@ -1061,6 +1063,27 @@ export default function Home() {
           {/* 步骤2: 爆款词根 */}
           {currentStep === 2 && (
             <div className="space-y-6">
+              {/* 词根生成中全局加载提示 */}
+              {generatingWordRoots && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+                  <div className="bg-white dark:bg-gray-900 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
+                    <div className="relative">
+                      <Loader2 className="w-12 h-12 text-purple-600 animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-purple-400" />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">正在分析行业词根...</h3>
+                      <p className="text-sm text-gray-500 mt-1">AI正在根据商户类型和行业特征生成高冲突指数的词根组合</p>
+                    </div>
+                    <div className="w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse w-full" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 词根分析过程 */}
               {wordRootAnalysis && (
                 <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
@@ -1461,61 +1484,100 @@ export default function Home() {
                               )}
                             </div>
 
-                            {/* 中文画面描述 - 从 description.visual 或 veoPrompt.chinese 获取 */}
-                            <div className="mb-3">
-                              <label className="text-xs font-medium text-purple-700 flex items-center gap-1 mb-1">
-                                <span>📝</span> 中文画面描述
-                              </label>
-                              <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed bg-white/60 dark:bg-gray-800/60 p-3 rounded">
-                                {shot.description?.visual || shot.veoPrompt?.chinese || shot.visual || '暂无描述'}
-                              </p>
-                            </div>
-
-                            {/* 英文Veo提示词 */}
-                            <div className="mb-3">
-                              <label className="text-xs font-medium text-blue-700 flex items-center gap-1 mb-1">
-                                <span>🌍</span> English Prompt
-                              </label>
-                              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed bg-blue-50/50 dark:bg-blue-900/20 p-3 rounded">
-                                {shot.veoPrompt?.english || shot.veoPrompt || '暂无英文描述'}
-                              </p>
-                            </div>
-
-                            {/* 台词 */}
-                            {shot.dialogue && (
-                              <div className="mb-3">
-                                <label className="text-xs font-medium text-pink-700 flex items-center gap-1 mb-1">
-                                  <span>💬</span> 台词 / Dialogue
+                            {/* Veo 8要素展示 */}
+                            <div className="space-y-3">
+                              {/* 1. 主体 + 2. 动作 */}
+                              <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border-l-4 border-purple-500">
+                                <label className="text-xs font-semibold text-purple-700 flex items-center gap-1 mb-2">
+                                  <span>👤</span> 1. 主体与动作 (Subject & Action)
                                 </label>
-                                <div className="bg-pink-50/50 dark:bg-pink-900/20 p-3 rounded">
-                                  <p className="text-sm text-gray-800 dark:text-gray-200 italic">
-                                    "{typeof shot.dialogue === 'object' ? (shot.dialogue.chinese || shot.dialogue.english) : shot.dialogue}"
-                                  </p>
+                                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                                  {shot.description?.action || shot.description?.visual?.split('，')[0] || shot.visual || '暂无描述'}
+                                </p>
+                              </div>
+
+                              {/* 中文画面描述 - 优化后 */}
+                              <div className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border-l-4 border-blue-500">
+                                <label className="text-xs font-semibold text-blue-700 flex items-center gap-1 mb-2">
+                                  <span>📝</span> 优化后的中文提示词
+                                </label>
+                                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                                  {shot.veoPrompt?.chinese || shot.description?.visual || shot.visual || '暂无中文描述'}
+                                </p>
+                              </div>
+
+                              {/* 英文Veo提示词 - 核心 */}
+                              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-4 border-green-500">
+                                <label className="text-xs font-semibold text-green-700 flex items-center gap-1 mb-2">
+                                  <span>🌍</span> 2. English Prompt for Veo 3.1
+                                  <Badge variant="outline" className="ml-2 text-[10px]">复制使用</Badge>
+                                </label>
+                                <div className="bg-white dark:bg-gray-800 p-3 rounded border font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                  {shot.veoPrompt?.english || shot.veoPrompt || '暂无英文描述'}
                                 </div>
                               </div>
-                            )}
 
-                            {/* 场景信息 */}
-                            <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                              {shot.location && (
-                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                                  📍 {shot.location}
-                                </span>
-                              )}
-                              {shot.timeOfDay && (
-                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                                  🕐 {shot.timeOfDay}
-                                </span>
-                              )}
-                              {shot.colorTone && (
-                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                                  🎨 {shot.colorTone}
-                                </span>
-                              )}
-                              {shot.cameraWork?.movement && (
-                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                                  🎥 {shot.cameraWork.movement}
-                                </span>
+                              {/* 3-7要素详情 */}
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* 3. 风格 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">3. 风格 Style</span>
+                                  <p className="text-sm font-medium">{shot.style || shot.description?.style || 'Cinematic'}</p>
+                                </div>
+                                {/* 4. 相机位置与运动 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">4. 相机 Camera</span>
+                                  <p className="text-sm font-medium">{shot.cameraWork?.movement || shot.camera?.movement || 'Static shot'}</p>
+                                </div>
+                                {/* 5. 构图 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">5. 构图 Composition</span>
+                                  <p className="text-sm font-medium">{shot.cameraWork?.shot || shot.camera?.shot || 'Medium shot'}</p>
+                                </div>
+                                {/* 6. 对焦与镜头效果 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">6. 镜头效果 Lens</span>
+                                  <p className="text-sm font-medium">{shot.cameraWork?.lens || shot.lens || 'Natural focus'}</p>
+                                </div>
+                                {/* 7. 氛围 - 时间 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">7. 时间 Time</span>
+                                  <p className="text-sm font-medium">{shot.timeOfDay || shot.atmosphere?.time || 'Day'}</p>
+                                </div>
+                                {/* 7. 氛围 - 色调 */}
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+                                  <span className="text-xs text-gray-500">7. 色调 Color</span>
+                                  <p className="text-sm font-medium">{shot.colorTone || shot.atmosphere?.color || 'Natural lighting'}</p>
+                                </div>
+                              </div>
+
+                              {/* 8. 音频提示 */}
+                              {(shot.audioPrompt || shot.dialogue) && (
+                                <div className="p-3 bg-pink-50/50 dark:bg-pink-900/20 rounded-lg border-l-4 border-pink-500">
+                                  <label className="text-xs font-semibold text-pink-700 flex items-center gap-1 mb-2">
+                                    <span>🔊</span> 8. 音频提示 Audio Prompt
+                                  </label>
+                                  {shot.dialogue && (
+                                    <div className="mb-2">
+                                      <span className="text-xs text-gray-500">台词 / Dialogue:</span>
+                                      <p className="text-sm italic text-gray-800 dark:text-gray-200">
+                                        "{typeof shot.dialogue === 'object' ? (shot.dialogue.chinese || shot.dialogue.english) : shot.dialogue}"
+                                      </p>
+                                    </div>
+                                  )}
+                                  {shot.audioPrompt?.chinese && (
+                                    <div className="text-sm text-gray-600">
+                                      <span className="text-xs text-gray-500">音效：</span>
+                                      {shot.audioPrompt.chinese}
+                                    </div>
+                                  )}
+                                  {shot.audioPrompt?.english && (
+                                    <div className="text-sm text-gray-600 mt-1 font-mono bg-white dark:bg-gray-800 p-2 rounded">
+                                      <span className="text-xs text-gray-500">English：</span>
+                                      {shot.audioPrompt.english}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1563,6 +1625,47 @@ export default function Home() {
                   <CardDescription>
                     根据分镜脚本分析，上传对应场景的素材
                   </CardDescription>
+                  
+                  {/* 视频比例选择 */}
+                  <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
+                      📐 选择视频比例（影响Veo视频生成尺寸）
+                    </label>
+                    <div className="flex gap-4">
+                      <div
+                        onClick={() => setAspectRatio("16:9")}
+                        className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          aspectRatio === "16:9"
+                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30"
+                            : "border-gray-200 hover:border-purple-300"
+                        }`}
+                      >
+                        <div className="flex flex-col items-center">
+                          <div className="w-16 h-9 bg-gray-800 rounded mb-2 flex items-center justify-center">
+                            <span className="text-white text-xs">16:9</span>
+                          </div>
+                          <span className="text-sm font-medium">横屏</span>
+                          <span className="text-xs text-gray-500">适合抖音/快手横版、B站</span>
+                        </div>
+                      </div>
+                      <div
+                        onClick={() => setAspectRatio("9:16")}
+                        className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          aspectRatio === "9:16"
+                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30"
+                            : "border-gray-200 hover:border-purple-300"
+                        }`}
+                      >
+                        <div className="flex flex-col items-center">
+                          <div className="w-9 h-16 bg-gray-800 rounded mb-2 flex items-center justify-center">
+                            <span className="text-white text-xs">9:16</span>
+                          </div>
+                          <span className="text-sm font-medium">竖屏</span>
+                          <span className="text-xs text-gray-500">适合抖音/快手竖版、视频号</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {shotScript && shotScript.shots ? (
