@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callGemini, buildChatPrompt } from "@/lib/gemini";
+import { callLLM, HeaderUtils } from "@/lib/llm";
 // import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 /**
@@ -158,8 +158,16 @@ ${JSON.stringify(script.ending_guide, null, 2)}
 请将以上脚本按8秒一个片段拆分为分镜脚本，每个分镜需要有完整的画面描述、台词和Veo提示词。
 `;
 
-    const fullPrompt = buildChatPrompt(SHOT_SCRIPT_PROMPT, userInput);
-    const responseText = await callGemini(fullPrompt);
+    // 提取请求头
+    const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
+    
+    // 调用LLM
+    const responseText = await callLLM(
+      SHOT_SCRIPT_PROMPT,
+      userInput,
+      customHeaders,
+      { temperature: 0.7 }
+    );
 
     // 解析LLM返回的JSON
     let shotScript;

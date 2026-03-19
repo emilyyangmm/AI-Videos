@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callGemini, buildChatPrompt } from "@/lib/gemini";
+import { callLLM, HeaderUtils } from "@/lib/llm";
 
 /**
  * Veo 3.1 提示词优化API
@@ -123,8 +123,16 @@ export async function POST(request: NextRequest) {
 
 请生成完整的Veo 3.1提示词。`;
 
-      const fullPrompt = buildChatPrompt(VEO_PROMPT_OPTIMIZER, userPrompt);
-      const responseText = await callGemini(fullPrompt);
+      // 提取请求头
+      const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
+      
+      // 调用LLM
+      const responseText = await callLLM(
+        VEO_PROMPT_OPTIMIZER,
+        userPrompt,
+        customHeaders,
+        { temperature: 0.7 }
+      );
 
       try {
         const content = responseText;
