@@ -163,6 +163,7 @@ export default function Home() {
   const [optimizedShots, setOptimizedShots] = useState<any[]>([]); // 优化后的分镜
   const [videos, setVideos] = useState<any[]>([]);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9"); // 视频宽高比
+  const [mergedVideo, setMergedVideo] = useState<string | null>(null); // 合成后的视频URL
   
   // 追踪已访问的步骤，用于支持返回调整
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
@@ -1612,6 +1613,33 @@ export default function Home() {
                           <ChevronRight className="w-4 h-4 ml-2" />
                         </Button>
                       </div>
+
+                      {/* 合成结果预览 */}
+                      {mergedVideo && (
+                        <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200">
+                          <h4 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5" />
+                            视频合成完成
+                          </h4>
+                          <div className="aspect-video bg-black rounded-lg overflow-hidden max-w-xl mx-auto">
+                            <video 
+                              src={mergedVideo} 
+                              controls 
+                              className="w-full h-full"
+                            />
+                          </div>
+                          <div className="mt-3 flex gap-2 justify-center">
+                            <a
+                              href={mergedVideo}
+                              download
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                            >
+                              <Download className="w-4 h-4" />
+                              下载视频
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-center py-12">
@@ -2157,25 +2185,41 @@ export default function Home() {
                               return;
                             }
                             
+                            // 获取脚本中的对话内容用于字幕
+                            const videosWithDialogue = videos.map((video: any, index: number) => {
+                              // 从分镜脚本中获取对应的台词
+                              const shot = script?.shot_list?.[index];
+                              return {
+                                ...video,
+                                dialogue: shot?.dialogue || shot?.content || ""
+                              };
+                            });
+                            
                             setLoading(true);
+                            toast.info("正在合成视频，请稍候...");
+                            
                             try {
-                              const res = await fetch("/api/videos/concat", {
+                              const res = await fetch("/api/videos/merge", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
                                   projectId: project.id,
-                                  videos: videos
+                                  videos: videosWithDialogue,
+                                  addSubtitles: true,
+                                  aspectRatio: aspectRatio
                                 })
                               });
                               
                               const data = await res.json();
                               
                               if (data.success) {
-                                toast.success(`视频合成完成！共 ${data.totalVideos} 个片段，总时长 ${data.totalDuration} 秒`);
+                                setMergedVideo(data.video_url);
+                                toast.success(`视频合成完成！${data.message || ''}`);
                               } else {
                                 toast.error(data.error || "视频合成失败");
                               }
                             } catch (error) {
+                              console.error("视频合成失败:", error);
                               toast.error("视频合成失败");
                             } finally {
                               setLoading(false);
