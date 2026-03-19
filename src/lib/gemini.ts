@@ -4,7 +4,7 @@
  */
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 
 interface GeminiResponse {
   candidates: Array<{
@@ -28,6 +28,9 @@ export async function callGemini(prompt: string): Promise<string> {
     throw new Error("GEMINI_API_KEY 环境变量未设置");
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
   const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
@@ -44,7 +47,10 @@ export async function callGemini(prompt: string): Promise<string> {
         },
       ],
     }),
+    signal: controller.signal,
   });
+
+  clearTimeout(timeout);
 
   if (!response.ok) {
     const errorText = await response.text();
