@@ -1,39 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, buildChatPrompt } from "@/lib/gemini";
 
-// 商户类型配置
-const MERCHANT_TYPE_CONFIG: Record<string, { 
-  style: string; 
-  tone: string;
-  persona: string;
-}> = {
-  ecommerce: {
-    style: "快节奏、直击痛点、强转化导向",
-    tone: "口语化、有冲击力、紧迫感",
-    persona: "懂产品的销售专家"
-  },
-  local_business: {
-    style: "生活化、真实感、引流导向",
-    tone: "亲切、热情、接地气",
-    persona: "热情的本地老板/探店达人"
-  },
-  brand_owner: {
-    style: "剧情化、情感丰富、品质感",
-    tone: "有温度、有态度、有情怀",
-    persona: "品牌创始人/品质生活家"
-  },
-  knowledge_blogger: {
-    style: "专业、易懂、干货导向",
-    tone: "专业但不枯燥、亲和但有干货",
-    persona: "行业专家/知识分享者"
-  },
-  story_ip: {
-    style: "剧情化、人设鲜明、情绪共鸣",
-    tone: "有个性、有张力、有反转",
-    persona: "有故事的人/情感主播"
-  }
-};
-
 // 脚本类型配置
 const SCRIPT_TYPE_CONFIG: Record<string, {
   structure: string;
@@ -57,16 +24,48 @@ const SCRIPT_TYPE_CONFIG: Record<string, {
   }
 };
 
-// 36钩子词根数据
-const HOOK_ELEMENTS: Record<string, string[]> = {
-  cost: ["花小钱装大杯", "省时省钱省力", "平替", "白嫖", "一招搞定", "9.9元"],
-  crowd: ["宝妈", "程序员", "打工人", "小个子", "巨蟹座", "处女座"],
-  curiosity: ["反常识", "万万没想到", "揭秘", "黑科技", "冷知识", "据说"],
-  contrast: ["身份错位", "场景反差", "没想到你是这样的", "居然", "竟然"],
-  worst: ["最丢脸", "最没面子", "避坑", "千万别买", "全网最低分"],
-  authority: ["明星同款", "大佬揭秘", "爱马仕工艺", "CCTV报道", "首富思维"],
-  nostalgia: ["童年回忆", "20年前", "小时候", "老味道", "经典复刻", "爷青回"],
-  hormone: ["找对象", "脱单", "渣男鉴别", "分手", "前任", "夫妻关系"]
+// 薛辉8大爆款元素及钩子词根
+const VIRAL_ELEMENTS: Record<string, { name: string; description: string; hooks: string[] }> = {
+  cost: {
+    name: "成本",
+    description: "省钱、省时、省力、性价比",
+    hooks: ["花小钱装大杯", "省时省钱省力", "平替", "白嫖", "一招搞定", "9.9元"]
+  },
+  crowd: {
+    name: "人群",
+    description: "精准人群标签，引发身份认同",
+    hooks: ["宝妈", "程序员", "打工人", "小个子", "巨蟹座", "处女座"]
+  },
+  curiosity: {
+    name: "好奇",
+    description: "制造悬念，激发求知欲",
+    hooks: ["反常识", "万万没想到", "揭秘", "黑科技", "冷知识", "据说"]
+  },
+  contrast: {
+    name: "反差",
+    description: "强烈的对比和转折",
+    hooks: ["身份错位", "场景反差", "没想到你是这样的", "居然", "竟然"]
+  },
+  worst: {
+    name: "负面",
+    description: "利用负面情绪制造共鸣",
+    hooks: ["最丢脸", "最没面子", "避坑", "千万别买", "全网最低分"]
+  },
+  authority: {
+    name: "权威",
+    description: "借助权威背书增加可信度",
+    hooks: ["明星同款", "大佬揭秘", "爱马仕工艺", "CCTV报道", "首富思维"]
+  },
+  nostalgia: {
+    name: "怀旧",
+    description: "唤起回忆，产生情感共鸣",
+    hooks: ["童年回忆", "20年前", "小时候", "老味道", "经典复刻", "爷青回"]
+  },
+  hormone: {
+    name: "荷尔蒙",
+    description: "情感、两性关系相关",
+    hooks: ["找对象", "脱单", "渣男鉴别", "分手", "前任", "夫妻关系"]
+  }
 };
 
 // 时长对应字数
@@ -77,36 +76,40 @@ const DURATION_WORD_COUNT: Record<number, { min: number; max: number }> = {
 };
 
 const getSystemPrompt = (
-  merchantType: string,
+  userIndustry: string,
+  videoGoal: string,
   scriptType: string,
-  selectedElements: string[],
+  viralElements: string[],
+  selectedHooks: string[],
   videoDuration: number
 ) => {
-  const merchantConfig = MERCHANT_TYPE_CONFIG[merchantType] || MERCHANT_TYPE_CONFIG.ecommerce;
   const scriptConfig = SCRIPT_TYPE_CONFIG[scriptType] || SCRIPT_TYPE_CONFIG.teach;
   const wordCount = DURATION_WORD_COUNT[videoDuration] || DURATION_WORD_COUNT[30];
 
   // 获取选中元素对应的钩子词根
-  const selectedHooks = selectedElements.map(el => ({
-    element: el,
-    hooks: HOOK_ELEMENTS[el] || []
+  const selectedElements = viralElements.map(key => ({
+    key,
+    name: VIRAL_ELEMENTS[key]?.name || key,
+    description: VIRAL_ELEMENTS[key]?.description || "",
+    hooks: VIRAL_ELEMENTS[key]?.hooks || []
   }));
 
   return `你是一位专业的短视频口播脚本创作专家，精通薛辉短视频架构方法论。
 
-【商户类型】
-- 类型：${merchantType}
-- 风格：${merchantConfig.style}
-- 语气：${merchantConfig.tone}
-- 人设：${merchantConfig.persona}
+【用户信息】
+- 行业领域：${userIndustry}
+- 视频目的：${videoGoal}
 
 【脚本类型】
 - 类型：${scriptType}
 - 结构：${scriptConfig.structure}
 - 展开方式：${scriptConfig.description}
 
-【选中的爆款元素及钩子词根】
-${selectedHooks.map(h => `- ${h.element}：${h.hooks.join('、')}`).join('\n')}
+【选中的爆款元素】
+${selectedElements.map(e => `- ${e.name}（${e.description}）：${e.hooks.join('、')}`).join('\n')}
+
+【用户勾选的钩子词根】
+${selectedHooks.length > 0 ? selectedHooks.map(h => `- ${h}`).join('\n') : '（用户未勾选，请从选中元素的钩子词根中选择）'}
 
 【时长与字数要求】
 - 总时长：${videoDuration}秒
@@ -116,13 +119,16 @@ ${selectedHooks.map(h => `- ${h.element}：${h.hooks.join('、')}`).join('\n')}
 【口播脚本结构要求】
 
 1. **开头钩子（前3秒，约15-20字）**
-   - 必须使用选中元素对应的钩子词根造句
+   - 必须使用用户勾选的钩子词根造句（如果用户勾选了）
+   - 如果用户未勾选，请从选中元素的钩子词根中选择合适的
    - 制造悬念或冲突，抓住观众注意力
-   - 示例风格：用"9.9元"开头 → "9.9元就能做到大牌同款效果？"
+   - 示例：用"9.9元"开头 → "9.9元就能做到大牌同款效果？"
 
 2. **中间内容（占60%时长，约${Math.round(wordCount.min * 0.6)}-${Math.round(wordCount.max * 0.6)}字）**
    - 根据${scriptType}类型展开：
    ${scriptConfig.description}
+   - 内容要与"${userIndustry}"行业相关
+   - 引导用户"${videoGoal}"
 
 3. **结尾引导（最后3-5秒，约15-20字）**
    - 明确的行动号召（点击/关注/来店/私信）
@@ -150,6 +156,8 @@ ${selectedHooks.map(h => `- ${h.element}：${h.hooks.join('、')}`).join('\n')}
 - 字数必须严格控制在${wordCount.min}-${wordCount.max}字之间
 - 只输出纯口播文案，不需要分镜描述
 - 结尾必须有明确的行动号召
+- 内容要符合"${userIndustry}"行业特点
+- 引导用户"${videoGoal}"
 `;
 };
 
@@ -157,25 +165,27 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { 
-      projectId, 
-      merchantType, 
+      userIndustry,
+      videoGoal,
       scriptType, 
-      selectedElements, 
+      viralElements, 
+      selectedHooks,
       videoDuration,
       topic 
     } = body;
 
-    if (!projectId) {
+    // 参数验证
+    if (!userIndustry || !videoGoal) {
       return NextResponse.json(
-        { error: "缺少必要参数：projectId" },
+        { error: "缺少必要参数：userIndustry 或 videoGoal" },
         { status: 400 }
       );
     }
 
-    const merchantKey = merchantType || "ecommerce";
     const scriptKey = scriptType || "teach";
     const duration = videoDuration || 30;
-    const elements = selectedElements || [];
+    const elements = viralElements || [];
+    const hooks = selectedHooks || [];
 
     // 构建用户输入
     const userPrompt = topic 
@@ -185,12 +195,12 @@ export async function POST(request: NextRequest) {
 情绪钩子：${topic.emotion_hook || topic.emotionHook}
 
 请基于以上选题，生成口播脚本。`
-      : `请根据商户类型"${merchantKey}"和脚本类型"${scriptKey}"，结合选中的爆款元素，生成一个口播脚本。`;
+      : `请根据行业"${userIndustry}"和视频目的"${videoGoal}"，结合选中的爆款元素和钩子词根，生成一个口播脚本。`;
 
     // 调用Gemini
     const responseText = await callGemini(
       buildChatPrompt(
-        getSystemPrompt(merchantKey, scriptKey, elements, duration), 
+        getSystemPrompt(userIndustry, videoGoal, scriptKey, elements, hooks, duration), 
         userPrompt
       )
     );

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, buildChatPrompt } from "@/lib/gemini";
-// import { getSupabaseClient } from "@/storage/database/supabase-client";
 
 // 7种爆款标题风格定义
 const TITLE_STYLES = [
@@ -62,23 +61,55 @@ const TITLE_STYLES = [
   }
 ];
 
-// 商户类型偏好风格
-const MERCHANT_STYLE_PREFERENCE: Record<string, string[]> = {
-  ecommerce: ["pain", "tutorial", "authority", "contrast", "suspense", "trend", "emotion"],
-  local_business: ["trend", "emotion", "suspense", "tutorial", "contrast", "authority", "pain"],
-  brand_owner: ["emotion", "contrast", "authority", "suspense", "trend", "tutorial", "pain"],
-  knowledge_blogger: ["authority", "tutorial", "pain", "suspense", "contrast", "emotion", "trend"],
-  story_ip: ["emotion", "contrast", "suspense", "trend", "authority", "pain", "tutorial"]
+// 薛辉8大爆款元素及钩子词根
+const VIRAL_ELEMENTS: Record<string, { name: string; description: string; hooks: string[] }> = {
+  cost: {
+    name: "成本",
+    description: "省钱、省时、省力、性价比",
+    hooks: ["花小钱装大杯", "省时省钱省力", "平替", "白嫖", "一招搞定", "9.9元"]
+  },
+  crowd: {
+    name: "人群",
+    description: "精准人群标签，引发身份认同",
+    hooks: ["宝妈", "程序员", "打工人", "小个子", "巨蟹座", "处女座"]
+  },
+  curiosity: {
+    name: "好奇",
+    description: "制造悬念，激发求知欲",
+    hooks: ["反常识", "万万没想到", "揭秘", "黑科技", "冷知识", "据说"]
+  },
+  contrast: {
+    name: "反差",
+    description: "强烈的对比和转折",
+    hooks: ["身份错位", "场景反差", "没想到你是这样的", "居然", "竟然"]
+  },
+  worst: {
+    name: "负面",
+    description: "利用负面情绪制造共鸣",
+    hooks: ["最丢脸", "最没面子", "避坑", "千万别买", "全网最低分"]
+  },
+  authority: {
+    name: "权威",
+    description: "借助权威背书增加可信度",
+    hooks: ["明星同款", "大佬揭秘", "爱马仕工艺", "CCTV报道", "首富思维"]
+  },
+  nostalgia: {
+    name: "怀旧",
+    description: "唤起回忆，产生情感共鸣",
+    hooks: ["童年回忆", "20年前", "小时候", "老味道", "经典复刻", "爷青回"]
+  },
+  hormone: {
+    name: "荷尔蒙",
+    description: "情感、两性关系相关",
+    hooks: ["找对象", "脱单", "渣男鉴别", "分手", "前任", "夫妻关系"]
+  }
 };
 
-const getSystemPrompt = (merchantType: string, duration: number) => {
-  const preferredStyles = MERCHANT_STYLE_PREFERENCE[merchantType] || MERCHANT_STYLE_PREFERENCE.ecommerce;
-  const styleOrder = preferredStyles.map((id, i) => `${i + 1}. ${TITLE_STYLES.find(s => s.id === id)?.name}`).join('\n');
-  
+const getSystemPrompt = (duration: number) => {
   return `你是一位专业的短视频爆款标题策划专家，精通薛辉短视频架构方法论。
 
 【核心任务】
-基于用户提供的词根组合，生成3个完整的爆款选题方案。
+基于用户提供的行业、视频目的和钩子词根，生成3个完整的爆款选题方案。
 每个选题方案需包含7种不同风格的标题变体（对应7种用户心理）。
 
 【7种标题风格定义】
@@ -89,17 +120,6 @@ const getSystemPrompt = (merchantType: string, duration: number) => {
 5. 实用/教程型：用"一招"、"教你"提供具体价值，情绪：获得感
 6. 痛点/避坑型：用"踩雷"、"后悔"直击焦虑，情绪：安全感
 7. 情感/共鸣型：用"只有…才懂"引发共情，情绪：归属感
-
-【商户类型风格优先级】
-当前商户类型推荐风格排序：
-${styleOrder}
-
-【输出要求】
-请生成3个选题方案，每个方案包含：
-- 选题标题（综合7种风格的最佳标题）
-- 冲突点（核心冲突描述）
-- 情绪钩子（引发的情绪）
-- 7种风格变体（每种风格一个标题变体，包含风格名称、标题、该风格的冲突点、该风格的情绪钩子）
 
 【时长适配】
 视频时长${duration}秒，${duration <= 30 ? '推荐更直接、冲击力强的选题' : '可适当增加情感铺垫和故事性'}
@@ -129,45 +149,42 @@ ${styleOrder}
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, industry, wordRootCombination, merchantType, videoDuration, materials } = body;
+    const { 
+      userIndustry,
+      videoGoal,
+      selectedHooks,
+      viralElements,
+      videoDuration 
+    } = body;
     
-    const merchantTypeKey = merchantType || "ecommerce";
     const duration = videoDuration || 30;
 
-    if (!projectId || !industry || !wordRootCombination) {
+    if (!userIndustry || !videoGoal) {
       return NextResponse.json(
-        { error: "缺少必要参数" },
+        { error: "缺少必要参数：userIndustry 或 videoGoal" },
         { status: 400 }
       );
     }
 
-    // 构建素材分析信息（如果有）
-    let materialsInfo = "";
-    if (materials && materials.length > 0) {
-      materialsInfo = `
-【用户上传素材】
-${materials.map((m: any, i: number) => 
-        `${i + 1}. 类型：${m.type}${m.description ? `，描述：${m.description}` : ''}`
-      ).join('\n')}
-选题和标题需要结合素材内容来设计。`;
-    }
+    // 获取选中的钩子词根
+    const hooksList = selectedHooks && selectedHooks.length > 0 
+      ? selectedHooks 
+      : (viralElements || []).flatMap((key: string) => VIRAL_ELEMENTS[key]?.hooks || []);
 
     const userPrompt = `【选题生成任务】
 
-行业：${industry}
-商户类型：${merchantTypeKey}
+行业领域：${userIndustry}
+视频目的：${videoGoal}
 视频时长：${duration}秒
 
-【词根组合】
-${wordRootCombination.elements.map((e: string) => `- ${e}`).join('\n')}
-词根说明：${wordRootCombination.description || '无'}
-${materialsInfo}
+【选中的钩子词根】
+${hooksList.map((h: string) => `- ${h}`).join('\n')}
 
-请基于以上信息，生成3个完整的爆款选题方案，每个方案包含7种不同风格的标题变体。`;
+请基于以上信息，生成3个完整的爆款选题方案，每个方案包含7种不同风格的标题变体。选题要与"${userIndustry}"行业相关，引导用户"${videoGoal}"。`;
 
     // 调用Gemini
     const responseText = await callGemini(
-      buildChatPrompt(getSystemPrompt(merchantTypeKey, duration), userPrompt)
+      buildChatPrompt(getSystemPrompt(duration), userPrompt)
     );
 
     // 解析LLM返回的JSON
@@ -183,35 +200,7 @@ ${materialsInfo}
       topicsData = { topics: [] };
     }
 
-    // 保存选题到数据库 - 已注释掉 Supabase
-    // const supabaseClient = getSupabaseClient();
-    // if (topicsData.topics && topicsData.topics.length > 0) {
-    //   const topicsToInsert = topicsData.topics.map((topic: any) => ({
-    //     project_id: projectId,
-    //     title: topic.title,
-    //     conflict_point: topic.conflictPoint,
-    //     emotion_hook: topic.emotionHook,
-    //     is_selected: false,
-    //   }));
-    //   const { data: insertedTopics, error: insertError } = await supabaseClient
-    //     .from("topics")
-    //     .insert(topicsToInsert)
-    //     .select();
-    //   if (insertError) {
-    //     console.error("保存选题失败:", insertError);
-    //   }
-    //   // 合并LLM返回的styleVariants到插入的数据中
-    //   const topicsWithVariants = insertedTopics?.map((dbTopic: any, idx: number) => ({
-    //     ...dbTopic,
-    //     styleVariants: topicsData.topics[idx]?.styleVariants || []
-    //   })) || topicsData.topics;
-    //   return NextResponse.json({
-    //     success: true,
-    //     topics: topicsWithVariants,
-    //     titleStyles: TITLE_STYLES
-    //   });
-    // }
-    console.log("[DB] 保存选题:", { projectId, topicsCount: topicsData.topics?.length || 0 });
+    console.log("[DB] 保存选题:", { industry: userIndustry, topicsCount: topicsData.topics?.length || 0 });
 
     return NextResponse.json({
       success: true,
@@ -231,43 +220,42 @@ ${materialsInfo}
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectId, industry, wordRootCombination, merchantType, videoDuration, materials } = body;
+    const { 
+      userIndustry,
+      videoGoal,
+      selectedHooks,
+      viralElements,
+      videoDuration 
+    } = body;
     
-    const merchantTypeKey = merchantType || "ecommerce";
     const duration = videoDuration || 30;
 
-    if (!projectId || !industry || !wordRootCombination) {
+    if (!userIndustry || !videoGoal) {
       return NextResponse.json(
-        { error: "缺少必要参数" },
+        { error: "缺少必要参数：userIndustry 或 videoGoal" },
         { status: 400 }
       );
     }
 
-    // 构建素材分析信息
-    let materialsInfo = "";
-    if (materials && materials.length > 0) {
-      materialsInfo = `
-【用户上传素材】
-${materials.map((m: any, i: number) => 
-        `${i + 1}. 类型：${m.type}${m.description ? `，描述：${m.description}` : ''}`
-      ).join('\n')}`;
-    }
+    // 获取选中的钩子词根
+    const hooksList = selectedHooks && selectedHooks.length > 0 
+      ? selectedHooks 
+      : (viralElements || []).flatMap((key: string) => VIRAL_ELEMENTS[key]?.hooks || []);
 
     const userPrompt = `【选题重新生成任务】请生成完全不同的选题
 
-行业：${industry}
-商户类型：${merchantTypeKey}
+行业领域：${userIndustry}
+视频目的：${videoGoal}
 视频时长：${duration}秒
 
-【词根组合】
-${wordRootCombination.elements.map((e: string) => `- ${e}`).join('\n')}
-${materialsInfo}
+【选中的钩子词根】
+${hooksList.map((h: string) => `- ${h}`).join('\n')}
 
-请生成3个完全不同的爆款选题方案（与之前的不同），每个方案包含7种不同风格的标题变体。`;
+请生成3个完全不同的爆款选题方案（与之前的不同），每个方案包含7种不同风格的标题变体。选题要与"${userIndustry}"行业相关，引导用户"${videoGoal}"。`;
 
     // 调用Gemini
     const responseText = await callGemini(
-      buildChatPrompt(getSystemPrompt(merchantTypeKey, duration), userPrompt)
+      buildChatPrompt(getSystemPrompt(duration), userPrompt)
     );
 
     // 解析并保存新选题
@@ -283,33 +271,7 @@ ${materialsInfo}
       topicsData = { topics: [] };
     }
 
-    // const supabaseClient = getSupabaseClient();
-    // if (topicsData.topics && topicsData.topics.length > 0) {
-    //   const topicsToInsert = topicsData.topics.map((topic: any) => ({
-    //     project_id: projectId,
-    //     title: topic.title,
-    //     conflict_point: topic.conflictPoint,
-    //     emotion_hook: topic.emotionHook,
-    //     is_selected: false,
-    //   }));
-    //   const { data: insertedTopics, error: insertError } = await supabaseClient
-    //     .from("topics")
-    //     .insert(topicsToInsert)
-    //     .select();
-    //   if (insertError) {
-    //     console.error("保存选题失败:", insertError);
-    //   }
-    //   const topicsWithVariants = insertedTopics?.map((dbTopic: any, idx: number) => ({
-    //     ...dbTopic,
-    //     styleVariants: topicsData.topics[idx]?.styleVariants || []
-    //   })) || topicsData.topics;
-    //   return NextResponse.json({
-    //     success: true,
-    //     topics: topicsWithVariants,
-    //     titleStyles: TITLE_STYLES
-    //   });
-    // }
-    console.log("[DB] 重新生成选题:", { projectId, topicsCount: topicsData.topics?.length || 0 });
+    console.log("[DB] 重新生成选题:", { industry: userIndustry, topicsCount: topicsData.topics?.length || 0 });
 
     return NextResponse.json({
       success: true,

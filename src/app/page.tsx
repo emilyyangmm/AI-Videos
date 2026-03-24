@@ -76,9 +76,9 @@ interface Script {
 }
 
 const STEPS = [
-  { id: 1, title: "场景设定", icon: Target, description: "选择商户类型、行业和时长" },
+  { id: 1, title: "场景设定", icon: Target, description: "输入行业和视频目的" },
   { id: 2, title: "脚本类型", icon: FileText, description: "选择口播脚本类型" },
-  { id: 3, title: "爆款元素", icon: Sparkles, description: "选择爆款元素组合" },
+  { id: 3, title: "爆款元素", icon: Sparkles, description: "选择爆款元素和钩子词根" },
   { id: 4, title: "爆款选题", icon: Lightbulb, description: "生成8个爆款选题" },
   { id: 5, title: "口播脚本", icon: FileText, description: "生成口播文案" },
   { id: 6, title: "数字人生成", icon: Video, description: "生成口播数字人视频" },
@@ -308,17 +308,16 @@ export default function Home() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // 维度一：商户类型
-  const [selectedMerchantType, setSelectedMerchantType] = useState<string | null>(null);
-  // 维度二：行业领域
-  const [selectedIndustry, setSelectedIndustry] = useState<string>("");
-  const [customIndustry, setCustomIndustry] = useState<string>("");
-  // 视频时长
-  const [videoDuration, setVideoDuration] = useState<number>(30);
+  // 步骤1：场景设定（新流程）
+  const [userIndustry, setUserIndustry] = useState<string>(""); // 用户输入的行业
+  const [videoGoal, setVideoGoal] = useState<string>(""); // 视频目的
+  const [videoDuration, setVideoDuration] = useState<number>(30); // 视频时长
+  const [recommendedDuration, setRecommendedDuration] = useState<number>(30); // 推荐时长
   
   // 新流程状态
   const [scriptType, setScriptType] = useState<string | null>(null); // 脚本类型
   const [selectedElements, setSelectedElements] = useState<string[]>([]); // 选中的爆款元素
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]); // 用户勾选的钩子词根
   const [portraitImage, setPortraitImage] = useState<string | null>(null); // 人像图片
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null); // 背景图片
   const [motionStyle, setMotionStyle] = useState<string>("friendly"); // 动作风格
@@ -334,9 +333,6 @@ export default function Home() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [script, setScript] = useState<Script | null>(null);
-  const [shotScript, setShotScript] = useState<any>(null); // 分镜脚本
-  const [optimizedShots, setOptimizedShots] = useState<any[]>([]); // 优化后的分镜
-  const [videos, setVideos] = useState<any[]>([]);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9"); // 视频宽高比
   const [mergedVideo, setMergedVideo] = useState<string | null>(null); // 合成后的视频URL
   
@@ -348,182 +344,93 @@ export default function Home() {
     setCurrentStep(step);
     setVisitedSteps(prev => new Set([...prev, step]));
   };
-
-  // 获取实际行业值
-  const getActualIndustry = () => customIndustry.trim() || selectedIndustry;
   
-  // 获取选中的商户类型配置
-  const getSelectedMerchantConfig = () => MERCHANT_TYPES.find(m => m.id === selectedMerchantType);
-
-  // 创建项目并开始
-  const handleStartProject = async () => {
-    const actualIndustry = getActualIndustry();
+  // 根据输入自动推荐时长
+  const getRecommendedDuration = (industry: string, goal: string): number => {
+    const goalLower = goal.toLowerCase();
+    const industryLower = industry.toLowerCase();
     
-    if (!actualIndustry) {
-      toast.error("请选择或输入行业领域");
-      return;
+    // 根据目的推荐
+    if (goalLower.includes("卖") || goalLower.includes("转化") || goalLower.includes("到店")) {
+      return 15; // 转化类推荐短视频
     }
-
-    if (!selectedMerchantType) {
-      toast.error("请选择商户类型");
-      return;
+    if (goalLower.includes("涨粉") || goalLower.includes("品牌") || goalLower.includes("认知")) {
+      return 45; // 品牌类推荐长视频
     }
+    if (goalLower.includes("引流")) {
+      return 30; // 引流类推荐中等
+    }
+    
+    // 根据行业推荐
+    if (industryLower.includes("美妆") || industryLower.includes("穿搭") || industryLower.includes("美食")) {
+      return 15; // 视觉类短
+    }
+    if (industryLower.includes("教育") || industryLower.includes("知识") || industryLower.includes("职场")) {
+      return 45; // 知识类长
+    }
+    
+    return 30; // 默认30秒
+  };
+  
+  // 监听输入变化，自动更新推荐时长
+  useEffect(() => {
+    if (userIndustry && videoGoal) {
+      const recommended = getRecommendedDuration(userIndustry, videoGoal);
+      setRecommendedDuration(recommended);
+      setVideoDuration(recommended);
+    }
+  }, [userIndustry, videoGoal]);
 
+  // 生成爆款选题
+  // 生成爆款选题
+  const generateTopics = async () => {
+    if (selectedElements.length === 0) return;
+    
     setLoading(true);
     try {
-      // 创建项目（包含商户类型和时长信息）
-      const res = await fetch("/api/projects", {
+      const res = await fetch("/api/topics/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          industry: actualIndustry,
-          merchantType: selectedMerchantType,
+        body: JSON.stringify({
+          userIndustry,
+          videoGoal,
+          viralElements: selectedElements,
+          selectedHooks,
           videoDuration,
+          count: 8
         }),
       });
       const data = await res.json();
       
       if (data.success) {
-        setProject(data.project);
-        toast.success("项目创建成功！");
-        
-        // 自动开始赛道分析
-        await analyzeIndustry(data.project.id);
+        setTopics(data.topics);
+        toast.success("已生成8个爆款选题！");
       } else {
-        toast.error(data.error || "创建项目失败");
+        toast.error(data.error || "生成选题失败");
       }
     } catch (error) {
-      toast.error("创建项目失败");
+      toast.error("生成选题失败");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // 赛道分析
-  const analyzeIndustry = async (projectId: string) => {
-    setLoading(true);
-    const actualIndustry = getActualIndustry();
-    try {
-      const res = await fetch("/api/industry/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          projectId, 
-          industry: actualIndustry,
-          merchantType: selectedMerchantType,
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        // 合并商户类型和时长信息到分析结果中
-        const analysisWithMeta = {
-          ...data.analysis,
-          merchantType: selectedMerchantType,
-          videoDuration: videoDuration,
-        };
-        setIndustryAnalysis(analysisWithMeta);
-        
-        // 先显示加载提示，再跳转到步骤2
-        setGeneratingWordRoots(true);
-        setCurrentStepWithTrack(2);
-        toast.success("赛道分析完成！");
-        
-        // 自动生成词根组合
-        await generateWordRoots(projectId, analysisWithMeta);
-      } else {
-        toast.error(data.error || "分析失败");
-      }
-    } catch (error) {
-      toast.error("赛道分析失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 生成词根组合
-  const generateWordRoots = async (projectId: string, analysis: any) => {
-    // 加载提示已在 analyzeIndustry 中提前设置
-    const actualIndustry = getActualIndustry();
-    try {
-      const res = await fetch("/api/word-roots/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          projectId, 
-          industry: actualIndustry,
-          industryAnalysis: analysis 
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        // 保存词根分析过程
-        setWordRootAnalysis(data.analysis || null);
-        
-        setWordRoots(data.combinations.map((combo: any, idx: number) => ({
-          id: `wr_${idx}`,
-          combination: combo,
-          is_selected: false,
-        })));
-        setCurrentStepWithTrack(2);
-        toast.success("词根组合生成完成！");
-      }
-    } catch (error) {
-      toast.error("词根组合生成失败");
-    } finally {
-      setGeneratingWordRoots(false);
-    }
-  };
-
-  // 选择词根组合
-  const [generatingTopicForWordRoot, setGeneratingTopicForWordRoot] = useState<string | null>(null);
-  
-  const selectWordRoot = async (wordRootId: string) => {
-    // 如果正在生成中，不响应点击
-    if (generatingTopicForWordRoot) return;
-    
-    setWordRoots(prev => prev.map(wr => ({
-      ...wr,
-      is_selected: wr.id === wordRootId,
-    })));
-    
-    const selected = wordRoots.find(wr => wr.id === wordRootId);
-    const actualIndustry = getActualIndustry();
-    if (selected && project) {
-      // 生成选题 - 设置具体哪个词根在生成中
-      setGeneratingTopicForWordRoot(wordRootId);
-      try {
-        const res = await fetch("/api/topics/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId: project.id,
-            industry: actualIndustry,
-            wordRootCombination: selected.combination,
-            merchantType: selectedMerchantType,
-            videoDuration: videoDuration,
-          }),
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          setTopics(data.topics);
-          setCurrentStepWithTrack(3);
-          toast.success("选题生成完成！");
-        }
-      } catch (error) {
-        toast.error("选题生成失败");
-      } finally {
-        setGeneratingTopicForWordRoot(null);
-      }
     }
   };
 
   // 换一批选题
+  const refreshTopics = async () => {
+    generateTopics();
+  };
+
+  // 选择选题
+  const selectTopic = async (topicId: string) => {
+    setTopics(prev => prev.map(t => ({
+      ...t,
+      is_selected: t.id === topicId,
+    })));
+  };
+
   // 生成口播脚本
   const generateScript = async () => {
-    if (!project || !topics.some((t: any) => t.is_selected)) return;
+    if (!topics.some((t: any) => t.is_selected)) return;
     
     setLoading(true);
     try {
@@ -532,11 +439,13 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId: project.id,
+          userIndustry,
+          videoGoal,
           topic: selectedTopic,
           duration: videoDuration,
-          scriptType: scriptType,
-          viralElements: selectedElements
+          scriptType,
+          viralElements: selectedElements,
+          selectedHooks
         }),
       });
       const data = await res.json();
@@ -544,6 +453,8 @@ export default function Home() {
       if (data.success) {
         setScript(data.script);
         toast.success("脚本生成成功！");
+      } else {
+        toast.error(data.error || "脚本生成失败");
       }
     } catch (error) {
       toast.error("生成脚本失败");
@@ -573,491 +484,6 @@ export default function Home() {
       }
     }, 5000);
   };
-
-  const refreshTopics = async () => {
-    if (!project) return;
-    const selected = wordRoots.find(wr => wr.is_selected);
-    if (!selected) return;
-    const actualIndustry = getActualIndustry();
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/topics/generate", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          industry: actualIndustry,
-          wordRootCombination: selected.combination,
-          merchantType: selectedMerchantType,
-          videoDuration: videoDuration,
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setTopics(data.topics);
-        toast.success("已生成新选题！");
-      }
-    } catch (error) {
-      toast.error("重新生成失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 旧的生成选题函数（保留兼容）
-  const generateTopics = async () => {
-    if (!project || selectedElements.length === 0) return;
-    
-    setLoading(true);
-    try {
-      const res = await fetch("/api/topics/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          industry: getActualIndustry(),
-          viralElements: selectedElements,
-          merchantType: selectedMerchantType,
-          videoDuration: videoDuration,
-          count: 8
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setTopics(data.topics);
-        toast.success("已生成8个爆款选题！");
-      }
-    } catch (error) {
-      toast.error("生成选题失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 选择选题
-  const [generatingScript, setGeneratingScript] = useState(false);
-  
-  const selectTopic = async (topicId: string) => {
-    setTopics(prev => prev.map(t => ({
-      ...t,
-      is_selected: t.id === topicId,
-    })));
-    
-    // 自动进入脚本生成
-    const selectedTopic = topics.find(t => t.id === topicId);
-    const selectedWordRoot = wordRoots.find(wr => wr.is_selected);
-    
-    if (selectedTopic && selectedWordRoot && project) {
-      setGeneratingScript(true);
-      try {
-        const res = await fetch("/api/scripts/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId: project.id,
-            topic: selectedTopic,
-            wordRoots: selectedWordRoot.combination,
-            materials: [],
-            merchantType: selectedMerchantType,
-            videoDuration: videoDuration,
-          }),
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          setScript(data.script);
-          setCurrentStepWithTrack(4);
-          toast.success("脚本生成完成！");
-        }
-      } catch (error) {
-        toast.error("脚本生成失败");
-      } finally {
-        setGeneratingScript(false);
-      }
-    }
-  };
-
-  // 上传素材
-  const handleUploadMaterial = async (
-    e: React.ChangeEvent<HTMLInputElement>, 
-    shotIndex?: number, 
-    category?: string
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file || !project) return;
-
-    const formData = new FormData();
-    formData.append("projectId", project.id);
-    formData.append("type", file.type.startsWith("image") ? "image" : "video");
-    formData.append("file", file);
-    if (shotIndex !== undefined) formData.append("shotIndex", String(shotIndex));
-    if (category) formData.append("category", category);
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/materials", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setMaterials(prev => [...prev, { ...data.material, shotIndex, category }]);
-        toast.success(`${category || '素材'}上传成功！`);
-      }
-    } catch (error) {
-      toast.error("上传失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 生成脚本（旧版本，保留分镜脚本生成）
-  const [materialAnalysis, setMaterialAnalysis] = useState<any[]>([]);
-  
-  const generateScriptWithMaterials = async () => {
-    if (!project) return;
-    const selectedTopic = topics.find(t => t.is_selected);
-    const selectedWordRoot = wordRoots.find(wr => wr.is_selected);
-    if (!selectedTopic || !selectedWordRoot) {
-      toast.error("请先选择选题");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 准备素材数据
-      const materialsData = materials.map(m => ({
-        type: m.type,
-        uri: m.url,
-        description: m.description || '',
-      }));
-
-      const res = await fetch("/api/scripts/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          topic: selectedTopic,
-          wordRoots: selectedWordRoot.combination,
-          materials: materialsData,
-          merchantType: selectedMerchantType,
-          videoDuration: videoDuration,
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setScript(data.script);
-        if (data.materialAnalysis && data.materialAnalysis.length > 0) {
-          setMaterialAnalysis(data.materialAnalysis);
-        }
-        setCurrentStepWithTrack(5);
-        toast.success("脚本生成完成！");
-      }
-    } catch (error) {
-      toast.error("脚本生成失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 生成分镜脚本（按8秒拆分）
-  const generateShotScript = async () => {
-    if (!script) {
-      toast.error("请先生成基础脚本");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/scripts/shots", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project?.id,
-          script,
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setShotScript(data.shotScript);
-        // 生成分镜脚本后自动跳转到步骤5让用户查看和确认
-        setCurrentStepWithTrack(5);
-        toast.success(`分镜脚本生成完成！共 ${data.shotScript.shotCount} 个分镜，请查看确认`);
-      } else {
-        toast.error(data.error || "分镜脚本生成失败");
-      }
-    } catch (error) {
-      toast.error("分镜脚本生成失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 优化Veo提示词
-  const optimizeVeoPrompts = async () => {
-    if (!shotScript || !shotScript.shots) {
-      toast.error("请先生成分镜脚本");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/veo/prompts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shots: shotScript.shots,
-          aspectRatio: "16:9",
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setOptimizedShots(data.shots);
-        toast.success(`提示词优化完成！${data.shotCount} 个分镜已准备就绪`);
-      } else {
-        toast.error(data.error || "提示词优化失败");
-      }
-    } catch (error) {
-      toast.error("提示词优化失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 直接生成视频（从基础脚本）
-  const generateVideos = async () => {
-    if (!script || !project) {
-      toast.error("请先生成基础脚本");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 将基础脚本转换为简化的分镜格式
-      const shots: any[] = [];
-      
-      // 开头
-      if (script.opening_hook) {
-        shots.push({
-          shotId: "opening",
-          type: "opening",
-          duration: 8,
-          visual: script.opening_hook.visual,
-          dialogue: script.opening_hook.script,
-          veoPrompt: `${script.opening_hook.visual}, cinematic, professional camera movement, high quality`,
-        });
-      }
-      
-      // 中间内容
-      if (script.middle_content) {
-        script.middle_content.forEach((section: any, index: number) => {
-          shots.push({
-            shotId: `middle-${index}`,
-            type: "content",
-            duration: 8,
-            visual: section.visual,
-            dialogue: section.script,
-            veoPrompt: `${section.visual}, cinematic, professional camera movement, high quality`,
-          });
-        });
-      }
-      
-      // 结尾
-      if (script.ending_guide) {
-        shots.push({
-          shotId: "ending",
-          type: "ending",
-          duration: 8,
-          visual: script.ending_guide.visual,
-          dialogue: script.ending_guide.cta,
-          veoPrompt: `${script.ending_guide.visual}, cinematic, professional camera movement, high quality`,
-        });
-      }
-
-      if (shots.length === 0) {
-        toast.error("没有可生成的分镜");
-        return;
-      }
-
-      // 提交批量生成
-      const res = await fetch("/api/veo/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          shots: shots,
-          aspectRatio: "16:9",
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        // 初始化所有任务状态
-        const newOperations = new Map(veoOperations);
-        data.results.forEach((r: any) => {
-          if (r.success && r.operationName) {
-            newOperations.set(r.operationName, {
-              status: "processing",
-              progress: 5,
-              shotId: r.shotId,
-            });
-            startPolling(r.operationName, r.shotId);
-          }
-        });
-        
-        setVeoOperations(newOperations);
-        setCurrentStepWithTrack(7);
-        toast.success(`已提交 ${shots.length} 个视频生成任务`);
-      } else {
-        toast.error(data.error || "提交失败");
-      }
-    } catch (error) {
-      toast.error("视频生成提交失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Veo 视频生成状态
-  const [veoOperations, setVeoOperations] = useState<Map<string, { status: string; progress: number; videoUrl?: string; shotId?: string }>>(new Map());
-  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-
-  // 提交 Veo 视频生成任务（批量）
-  const submitVeoTasks = async () => {
-    const shotsToGenerate = optimizedShots.length > 0 ? optimizedShots : shotScript?.shots;
-    
-    if (!project || !shotsToGenerate || shotsToGenerate.length === 0) {
-      toast.error("没有可生成的分镜");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/veo/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          shots: shotsToGenerate,
-          materials: materials, // 传递用户上传的素材
-          aspectRatio: aspectRatio, // 使用选择的视频比例
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        // 初始化所有任务状态
-        const newOperations = new Map(veoOperations);
-        data.results.forEach((r: any) => {
-          if (r.success && r.operationName) {
-            newOperations.set(r.operationName, {
-              status: "processing",
-              progress: 5,
-              shotId: r.shotId,
-            });
-            startPolling(r.operationName, r.shotId);
-          }
-        });
-        
-        setVeoOperations(newOperations);
-        setCurrentStepWithTrack(7);
-        toast.success(data.message);
-      } else {
-        toast.error(data.error || "提交失败");
-      }
-    } catch (error) {
-      toast.error("提交失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 轮询任务状态
-  const startPolling = (operationName: string, shotId?: string) => {
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/veo/generate?operation_name=${encodeURIComponent(operationName)}`);
-        const data = await res.json();
-        
-        setVeoOperations(prev => {
-          const newMap = new Map(prev);
-          const current = newMap.get(operationName) || { status: "processing", progress: 5, shotId };
-          
-          if (data.done) {
-            if (data.success) {
-              newMap.set(operationName, {
-                status: "completed",
-                progress: 100,
-                videoUrl: data.video_url || data.gcs_uri,
-                shotId,
-              });
-              
-              // 添加到视频列表（去重：检查operationName是否已存在）
-              setVideos(v => {
-                if (v.some(video => video.operationName === operationName)) {
-                  return v; // 已存在，不重复添加
-                }
-                return [...v, {
-                  shotId,
-                  operationName,
-                  videoUrl: data.video_url || data.gcs_uri,
-                  success: true,
-                }];
-              });
-              
-              toast.success(`分镜 ${shotId} 视频生成完成`);
-            } else {
-              newMap.set(operationName, {
-                status: "failed",
-                progress: 0,
-                shotId,
-              });
-              toast.error(`分镜 ${shotId} 生成失败: ${data.error}`);
-            }
-            
-            // 停止轮询
-            const timer = pollingRef.current.get(operationName);
-            if (timer) {
-              clearInterval(timer);
-              pollingRef.current.delete(operationName);
-            }
-          } else {
-            // 更新进度
-            newMap.set(operationName, {
-              ...current,
-              progress: Math.min(current.progress + 4, 92),
-            });
-          }
-          
-          return newMap;
-        });
-      } catch (error) {
-        console.error("轮询失败:", error);
-      }
-    };
-    
-    // 每8秒轮询一次
-    const timer = setInterval(poll, 8000);
-    pollingRef.current.set(operationName, timer);
-    
-    // 立即执行一次
-    poll();
-  };
-
-  // 计算总体进度
-  const totalProgress = veoOperations.size > 0
-    ? Array.from(veoOperations.values()).reduce((sum, op) => sum + op.progress, 0) / veoOperations.size
-    : 0;
-  
-  const completedCount = Array.from(veoOperations.values()).filter(op => op.status === "completed").length;
-  const failedCount = Array.from(veoOperations.values()).filter(op => op.status === "failed").length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -1127,206 +553,99 @@ export default function Home() {
 
         {/* 步骤内容 */}
         <div className="max-w-4xl mx-auto">
-          {/* 步骤1: 双维度设定 */}
+          {/* 步骤1: 场景设定 */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              {/* 维度一：商户类型 */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Target className="w-5 h-5 text-purple-600" />
-                    维度一：你的商户类型
+                    第1步：场景设定
                   </CardTitle>
                   <CardDescription>
-                    选择你的商户类型，系统会推荐最合适的视频时长和内容策略
+                    告诉我们你的行业和视频目的，系统会为你推荐最合适的内容策略
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {MERCHANT_TYPES.map((merchant) => (
-                      <div
-                        key={merchant.id}
-                        onClick={() => {
-                          setSelectedMerchantType(merchant.id);
-                          setVideoDuration(merchant.recommendedDuration[0]);
-                        }}
-                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                          selectedMerchantType === merchant.id
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                            : "border-gray-200 hover:border-purple-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xl">{merchant.icon}</span>
-                          <h4 className="font-medium">{merchant.title}</h4>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2">{merchant.examples}</p>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Clock className="w-3.5 h-3.5 text-purple-600" />
-                          <span className="text-purple-600 font-medium">
-                            {merchant.recommendedDuration[0]}-{merchant.recommendedDuration[1]}秒
-                          </span>
-                        </div>
-                        {selectedMerchantType === merchant.id && (
-                          <div className="mt-2 pt-2 border-t border-purple-200">
-                            <p className="text-xs text-purple-600">
-                              <span className="font-medium">目标：</span>{merchant.goal}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                <CardContent className="space-y-6">
+                  {/* 行业输入 */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-purple-600">🏢</span> 你的行业领域
+                    </label>
+                    <Input
+                      placeholder="例如：美妆、宠物、职场、美食、教育..."
+                      value={userIndustry}
+                      onChange={(e) => setUserIndustry(e.target.value)}
+                      className="text-lg py-3"
+                    />
+                    <p className="text-xs text-gray-500">
+                      输入你的具体行业，越具体越好
+                    </p>
                   </div>
+
+                  {/* 视频目的输入 */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <span className="text-pink-600">🎯</span> 这条视频的目的是什么
+                    </label>
+                    <Input
+                      placeholder="例如：引流到店、卖产品、涨粉、建立品牌认知..."
+                      value={videoGoal}
+                      onChange={(e) => setVideoGoal(e.target.value)}
+                      className="text-lg py-3"
+                    />
+                    <p className="text-xs text-gray-500">
+                      明确目的，让AI生成更精准的内容
+                    </p>
+                  </div>
+
+                  {/* 时长选择 */}
+                  <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium">视频时长</span>
+                      {userIndustry && videoGoal && (
+                        <Badge variant="outline" className="text-purple-600 border-purple-600">
+                          AI推荐：{recommendedDuration}秒
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-3">
+                      {[15, 30, 45].map((duration) => (
+                        <button
+                          key={duration}
+                          onClick={() => setVideoDuration(duration)}
+                          className={`flex-1 py-3 rounded-lg border-2 transition-all ${
+                            videoDuration === duration
+                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30"
+                              : "border-gray-200 hover:border-purple-300"
+                          }`}
+                        >
+                          <div className="text-lg font-bold">{duration}秒</div>
+                          <div className="text-xs text-gray-500">
+                            约 {DURATION_WORD_COUNT[duration].min}-{DURATION_WORD_COUNT[duration].max} 字
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 开始按钮 */}
+                  <Button
+                    onClick={() => {
+                      if (!userIndustry.trim() || !videoGoal.trim()) {
+                        toast.error("请填写行业和视频目的");
+                        return;
+                      }
+                      setCurrentStepWithTrack(2);
+                    }}
+                    disabled={!userIndustry.trim() || !videoGoal.trim()}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    下一步：选择脚本类型
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
                 </CardContent>
               </Card>
-
-              {/* 维度二：行业领域 + 时长设置 */}
-              {selectedMerchantType && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-purple-600" />
-                      维度二：你的行业领域
-                    </CardTitle>
-                    <CardDescription>
-                      选择或输入你的行业领域，系统将生成精准的内容方向
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* 时长设置 */}
-                    <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="font-medium">视频时长</span>
-                        <Badge variant="secondary" className="text-lg px-3 py-1">
-                          {videoDuration} 秒
-                        </Badge>
-                      </div>
-                      <input
-                        type="range"
-                        min={getSelectedMerchantConfig()?.recommendedDuration[0]}
-                        max={getSelectedMerchantConfig()?.recommendedDuration[1]}
-                        value={videoDuration}
-                        onChange={(e) => setVideoDuration(parseInt(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                      />
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>{getSelectedMerchantConfig()?.recommendedDuration[0]}秒</span>
-                        <span className="text-purple-600">预计 {Math.ceil(videoDuration / 8)} 个分镜</span>
-                        <span>{getSelectedMerchantConfig()?.recommendedDuration[1]}秒</span>
-                      </div>
-                    </div>
-
-                    {/* 预设行业 */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">选择行业（点击选择）</label>
-                      <div className="flex gap-2 flex-wrap">
-                        {INDUSTRIES.map((ind) => (
-                          <Badge
-                            key={ind}
-                            variant={selectedIndustry === ind ? "default" : "outline"}
-                            className={`cursor-pointer transition-all ${
-                              selectedIndustry === ind 
-                                ? "bg-purple-600 hover:bg-purple-700" 
-                                : "hover:bg-purple-100"
-                            }`}
-                            onClick={() => {
-                              setSelectedIndustry(ind);
-                              setCustomIndustry("");
-                            }}
-                          >
-                            {ind}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 自定义行业 */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">或自定义输入</label>
-                      <Input
-                        placeholder="输入你的行业领域..."
-                        value={customIndustry}
-                        onChange={(e) => {
-                          setCustomIndustry(e.target.value);
-                          setSelectedIndustry("");
-                        }}
-                        onKeyPress={(e) => e.key === "Enter" && handleStartProject()}
-                        className="text-lg"
-                      />
-                    </div>
-
-                    <Button
-                      onClick={handleStartProject}
-                      disabled={loading || !getActualIndustry()}
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          正在分析...
-                        </>
-                      ) : (
-                        "开始智能分析"
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* 空状态提示 */}
-              {!selectedMerchantType && (
-                <div className="text-center py-8">
-                  <Target className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600">请先选择你的商户类型</p>
-                </div>
-              )}
-
-              {/* 赛道分析结果 */}
-              {industryAnalysis && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      📊 赛道分析结果
-                    </CardTitle>
-                    <CardDescription>
-                      基于你的商户类型和行业领域，系统为你生成以下分析
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 bg-purple-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2 flex items-center gap-2">
-                          <span className="text-purple-600">👥</span> 目标人群特征
-                        </h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {industryAnalysis.targetAudience?.description || 
-                           `${industryAnalysis.targetAudience?.age || "分析中..."}`}
-                        </p>
-                      </div>
-                      
-                      <div className="p-4 bg-pink-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2 flex items-center gap-2">
-                          <span className="text-pink-600">💰</span> 适合的变现方式
-                        </h4>
-                        <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                          {industryAnalysis.monetizationMethods?.slice(0, 3).map((m: any, i: number) => (
-                            <li key={i}>• {m.method || m}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      
-                      <div className="p-4 bg-orange-50 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2 flex items-center gap-2">
-                          <span className="text-orange-600">🔥</span> 推荐爆款元素
-                        </h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {industryAnalysis.recommendedElements || getSelectedMerchantConfig()?.recommendedElements}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
           )}
 
@@ -1397,56 +716,138 @@ export default function Home() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-purple-600" />
-                    第3步：选择爆款元素
+                    第3步：选择爆款元素和钩子词根
                   </CardTitle>
                   <CardDescription>
-                    选择1-3个爆款元素，系统会自动使用对应的钩子词根生成吸睛内容
+                    建议选择2个元素，系统会组合使用对应钩子词根生成吸睛内容
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {VIRAL_ELEMENTS.map((element) => (
-                      <div
-                        key={element.id}
-                        onClick={() => {
-                          if (selectedElements.includes(element.id)) {
-                            setSelectedElements(selectedElements.filter(e => e !== element.id));
-                          } else if (selectedElements.length < 3) {
-                            setSelectedElements([...selectedElements, element.id]);
-                          }
-                        }}
-                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                          selectedElements.includes(element.id)
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                            : "border-gray-200 hover:border-purple-300"
-                        } ${selectedElements.length >= 3 && !selectedElements.includes(element.id) ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xl">{element.icon}</span>
-                          <span className="font-semibold text-sm">{element.title}</span>
-                          {selectedElements.includes(element.id) && <CheckCircle2 className="w-4 h-4 text-purple-600 ml-auto" />}
+                <CardContent className="space-y-6">
+                  {/* 爆款元素选择 */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">选择爆款元素（建议选2个）</label>
+                      <span className="text-sm text-gray-500">已选 {selectedElements.length}/3</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {VIRAL_ELEMENTS.map((element) => (
+                        <div
+                          key={element.id}
+                          onClick={() => {
+                            if (selectedElements.includes(element.id)) {
+                              setSelectedElements(selectedElements.filter(e => e !== element.id));
+                              // 移除该元素的钩子词根
+                              const hooksToRemove = element.hooks;
+                              setSelectedHooks(prev => prev.filter(h => !hooksToRemove.includes(h)));
+                            } else if (selectedElements.length < 3) {
+                              setSelectedElements([...selectedElements, element.id]);
+                              // 默认全选该元素的钩子词根
+                              setSelectedHooks(prev => [...new Set([...prev, ...element.hooks])]);
+                            }
+                          }}
+                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            selectedElements.includes(element.id)
+                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                              : "border-gray-200 hover:border-purple-300"
+                          } ${selectedElements.length >= 3 && !selectedElements.includes(element.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">{element.icon}</span>
+                            <span className="font-semibold text-sm">{element.title}</span>
+                            {selectedElements.includes(element.id) && <CheckCircle2 className="w-4 h-4 text-purple-600 ml-auto" />}
+                          </div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">{element.coreLogic}</p>
+                          {/* 显示钩子词根标签 */}
+                          <div className="flex flex-wrap gap-1">
+                            {element.hooks.map((hook, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{hook}</Badge>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">{element.coreLogic}</p>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {element.hooks.slice(0, 3).map((hook, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">{hook}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
+                  {/* 钩子词根选择区域 */}
                   {selectedElements.length > 0 && (
+                    <div className="space-y-3 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">勾选要使用的钩子词根</label>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // 全选所有已选元素的钩子
+                              const allHooks = selectedElements.flatMap(el => 
+                                VIRAL_ELEMENTS.find(e => e.id === el)?.hooks || []
+                              );
+                              setSelectedHooks([...new Set(allHooks)]);
+                            }}
+                          >
+                            全选
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedHooks([])}
+                          >
+                            清空
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500">默认全选，可取消不想用的词根。开头第一句会使用选中的词根。</p>
+                      
+                      {selectedElements.map((elementId) => {
+                        const element = VIRAL_ELEMENTS.find(e => e.id === elementId);
+                        if (!element) return null;
+                        return (
+                          <div key={elementId} className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                              <span>{element.icon}</span>
+                              <span>{element.title}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {element.hooks.map((hook, i) => (
+                                <Badge
+                                  key={`${elementId}-${i}`}
+                                  variant={selectedHooks.includes(hook) ? "default" : "outline"}
+                                  className={`cursor-pointer transition-all ${
+                                    selectedHooks.includes(hook)
+                                      ? "bg-purple-600 hover:bg-purple-700"
+                                      : "hover:bg-purple-100"
+                                  }`}
+                                  onClick={() => {
+                                    if (selectedHooks.includes(hook)) {
+                                      setSelectedHooks(selectedHooks.filter(h => h !== hook));
+                                    } else {
+                                      setSelectedHooks([...selectedHooks, hook]);
+                                    }
+                                  }}
+                                >
+                                  {hook}
+                                  {selectedHooks.includes(hook) && (
+                                    <CheckCircle2 className="w-3 h-3 ml-1" />
+                                  )}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 已选钩子词根汇总 */}
+                  {selectedHooks.length > 0 && (
                     <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <p className="text-sm text-green-700">
-                        已选择 {selectedElements.length} 个元素，将使用以下钩子词根：
+                      <p className="text-sm text-green-700 font-medium mb-2">
+                        已勾选 {selectedHooks.length} 个钩子词根
                       </p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {selectedElements.map(el => 
-                          VIRAL_ELEMENTS.find(e => e.id === el)?.hooks.map((hook, i) => (
-                            <Badge key={`${el}-${i}`} variant="outline" className="text-xs">{hook}</Badge>
-                          ))
-                        ).flat()}
+                      <div className="flex flex-wrap gap-1">
+                        {selectedHooks.map((hook, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-white">{hook}</Badge>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -1458,7 +859,7 @@ export default function Home() {
                     </Button>
                     <Button 
                       onClick={() => setCurrentStepWithTrack(4)} 
-                      disabled={selectedElements.length === 0}
+                      disabled={selectedElements.length === 0 || selectedHooks.length === 0}
                       className="flex-1"
                     >
                       下一步：生成选题
