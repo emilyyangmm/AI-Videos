@@ -192,146 +192,95 @@ async function generateTTS(
   script: string,
   voiceStyle: string
 ): Promise<{ audioUrl: string; duration: number }> {
-  const appId = process.env.VOLCENGINE_TTS_APP_ID || "";
-  const token = process.env.VOLCENGINE_TTS_TOKEN || "";
+  const appId = process.env.VOLCENGINE_TTS_APP_ID;
+  const token = process.env.VOLCENGINE_TTS_TOKEN;
   const voiceType = VOICE_TYPES[voiceStyle] || VOICE_TYPES.default;
 
   if (!appId || !token) {
     throw new Error("TTS配置缺失：请设置 VOLCENGINE_TTS_APP_ID 和 VOLCENGINE_TTS_TOKEN");
   }
 
-  // 豆包语音合成模型2.0字符版的资源ID（文档要求）
-  const resourceId = "seed-tts-2.0";
-  
-  // 生成唯一的连接ID和会话ID
-  const connectId = crypto.randomUUID();
-  const sessionId = crypto.randomUUID();
-
   console.log("[TTS] 调用火山引擎豆包语音合成模型2.0 V3 SSE API...");
-  console.log("[TTS] voice_type:", voiceType, "connect_id:", connectId, "session_id:", sessionId);
+  console.log("[TTS] voice_type:", voiceType);
   
-  // 使用 V3 HTTP SSE 单向流式接口
-  const ttsResponse = await fetch("https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-App-Key": appId,
-      "X-Api-Access-Key": token,
-      "X-Api-Resource-Id": resourceId,
-      "X-Api-Connect-Id": connectId,
-      // 可选：请求返回用量数据
-      "X-Control-Require-Usage-Tokens-Return": "text_words",
-    },
-    body: JSON.stringify({
-      user: {
-        uid: "user_001"
+  const response = await fetch(
+    "https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-App-Key": appId,
+        "X-Api-Access-Key": token,
+        "X-Api-Resource-Id": "seed-tts-2.0",
+        "X-Api-Connect-Id": `conn_${Date.now()}`,
       },
-      req_params: {
-        text: script.trim(),
-        speaker: voiceType,
-        audio_params: {
-          format: "mp3",
-          sample_rate: 24000,
-        },
-      },
-    }),
-  });
-
-  if (!ttsResponse.ok) {
-    const errText = await ttsResponse.text();
-    throw new Error(`TTS失败: ${ttsResponse.status} - ${errText}`);
-  }
-
-  // 处理 SSE 流式响应
-  const reader = ttsResponse.body?.getReader();
-  if (!reader) {
-    throw new Error("无法读取TTS响应流");
-  }
-
-  const decoder = new TextDecoder();
-  let audioChunks: Buffer[] = [];
-  let hasError = false;
-  let errorMessage = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      
-      if (done) {
-        console.log("[TTS] SSE流读取完成");
-        break;
-      }
-
-      // 解析 SSE 数据
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-      
-      for (const line of lines) {
-        if (line.startsWith('data:')) {
-          const data = line.substring(5).trim();
-          if (!data) continue;
-          
-          try {
-            const json = JSON.parse(data);
-            
-            // 检查错误事件
-            if (json.event === 'Error' || json.code && json.code !== 20000000) {
-              hasError = true;
-              errorMessage = json.message || json.msg || "未知错误";
-              console.error("[TTS] 错误事件:", json);
-              break;
-            }
-            
-            // 收集音频数据（event=TTSResponse）
-            if (json.event === 'TTSResponse' && json.data) {
-              const audioBuffer = Buffer.from(json.data, 'base64');
-              audioChunks.push(audioBuffer);
-              console.log(`[TTS] 收到音频块，大小: ${audioBuffer.length} bytes, 累计: ${audioChunks.length} 块`);
-            }
-          } catch (parseError) {
-            console.warn("[TTS] JSON解析失败:", data, parseError);
+      body: JSON.stringify({
+        user: { uid: "user_001" },
+        req_params: {
+          text: script.trim(),
+          speaker: voiceType,
+          audio_params: {
+            format: "mp3",
+            sample_rate: 24000
           }
         }
-      }
-      
-      if (hasError) break;
+      })
     }
-  } finally {
-    reader.releaseLock();
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`TTS失败: ${response.status} - ${err}`);
   }
 
-  if (hasError) {
-    throw new Error(`TTS合成失败: ${errorMessage}`);
+  // 处理 SSE 流式响应，收集所有音频 base64 数据
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  const audioChunks: Buffer[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    const lines = text.split("\n");
+    
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const json = JSON.parse(line.slice(6));
+          if (json.data) {
+            audioChunks.push(Buffer.from(json.data, "base64"));
+            console.log(`[TTS] 收到音频块，累计: ${audioChunks.length} 块`);
+          }
+        } catch (parseError) {
+          console.warn("[TTS] JSON解析失败:", line, parseError);
+        }
+      }
+    }
   }
 
   if (audioChunks.length === 0) {
     throw new Error("TTS合成失败：未收到音频数据");
   }
 
-  // 合并所有音频块
-  const audioBuffer = Buffer.concat(audioChunks);
-  console.log(`[TTS] 音频合成完成，总大小: ${audioBuffer.length} bytes`);
-  
-  // 将音频保存到本地文件
-  const fs = await import("fs");
-  const path = await import("path");
-  
-  const audioDir = "/tmp/veo_audio";
-  if (!fs.existsSync(audioDir)) {
-    fs.mkdirSync(audioDir, { recursive: true });
-  }
+  // 合并所有音频块保存到本地
+  const { writeFileSync, mkdirSync, existsSync } = await import("fs");
+  const { join } = await import("path");
+  const dir = "/tmp/veo_audio";
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   
   const filename = `tts_${Date.now()}.mp3`;
-  const filepath = path.join(audioDir, filename);
-  fs.writeFileSync(filepath, audioBuffer);
+  const filepath = join(dir, filename);
+  const audioBuffer = Buffer.concat(audioChunks);
+  writeFileSync(filepath, audioBuffer);
   
-  console.log(`[TTS] 音频已保存: ${filepath}`);
+  console.log(`[TTS] 音频已保存: ${filepath}, 大小: ${audioBuffer.length} bytes`);
   
-  // 返回本地文件路径（后续需要上传到对象存储获取公网URL）
-  const audioUrl = filepath;
-  const duration = Math.ceil(script.length / 4.5); // 预估时长
+  // 返回本地文件路径和预估时长
+  const duration = Math.ceil(script.length / 4.5);
 
-  return { audioUrl, duration };
+  return { audioUrl: filepath, duration };
 }
 
 /**
