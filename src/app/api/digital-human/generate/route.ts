@@ -206,7 +206,7 @@ async function generateTTS(
     app: {
       appid: appId,
       token: token,
-      cluster: "volcano_mega",  // 豆包大模型集群
+      cluster: "volcano_icl",  // 豆包语音合成模型2.0集群
     },
     user: { uid: "user_001" },
     audio: {
