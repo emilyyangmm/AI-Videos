@@ -185,8 +185,8 @@ async function callVolcengineAPI(
 }
 
 /**
- * 调用 TTS 生成音频（火山引擎语音合成）
- * 文档：https://www.volcengine.com/docs/6561/79817
+ * 调用 TTS 生成音频（火山引擎豆包语音合成模型2.0 V3 SSE接口）
+ * 文档：https://www.volcengine.com/docs/6561/1329505
  */
 async function generateTTS(
   script: string,
@@ -194,47 +194,47 @@ async function generateTTS(
 ): Promise<{ audioUrl: string; duration: number }> {
   const appId = process.env.VOLCENGINE_TTS_APP_ID || "";
   const token = process.env.VOLCENGINE_TTS_TOKEN || "";
-  const cluster = process.env.VOLCENGINE_TTS_CLUSTER || "volc_tts"; // 从环境变量读取 cluster
   const voiceType = VOICE_TYPES[voiceStyle] || VOICE_TYPES.default;
 
   if (!appId || !token) {
     throw new Error("TTS配置缺失：请设置 VOLCENGINE_TTS_APP_ID 和 VOLCENGINE_TTS_TOKEN");
   }
 
-  const ttsPayload = {
-    app: {
-      appid: appId,
-      token: token,
-      cluster: cluster,
-    },
-    user: { uid: "user_001" },
-    audio: {
-      voice_type: voiceType,
-      encoding: "mp3",
-      speed_ratio: 1.0,
-      volume_ratio: 1.0,
-      pitch_ratio: 1.0,
-    },
-    request: {
-      reqid: `req_${Date.now()}`,
-      text: script.trim(),
-      text_type: "plain",
-      operation: "query",
-    },
-  };
-
-  console.log("[TTS] 调用火山引擎TTS API...");
-  console.log("[TTS] cluster:", cluster, "voice_type:", voiceType);
+  // 豆包语音合成模型2.0字符版的资源ID（文档要求）
+  const resourceId = "seed-tts-2.0";
   
-  // 使用文档中的正确 URL
-  const ttsResponse = await fetch("https://openspeech.bytedance.com/tts_middle_layer/tts", {
+  // 生成唯一的连接ID和会话ID
+  const connectId = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
+
+  console.log("[TTS] 调用火山引擎豆包语音合成模型2.0 V3 SSE API...");
+  console.log("[TTS] voice_type:", voiceType, "connect_id:", connectId, "session_id:", sessionId);
+  
+  // 使用 V3 HTTP SSE 单向流式接口
+  const ttsResponse = await fetch("https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // 火山引擎 TTS 认证格式：Bearer;{token}（注意无空格）
-      Authorization: `Bearer;${token}`,
+      "X-Api-App-Key": appId,
+      "X-Api-Access-Key": token,
+      "X-Api-Resource-Id": resourceId,
+      "X-Api-Connect-Id": connectId,
+      // 可选：请求返回用量数据
+      "X-Control-Require-Usage-Tokens-Return": "text_words",
     },
-    body: JSON.stringify(ttsPayload),
+    body: JSON.stringify({
+      user: {
+        uid: "user_001"
+      },
+      req_params: {
+        text: script.trim(),
+        speaker: voiceType,
+        audio_params: {
+          format: "mp3",
+          sample_rate: 24000,
+        },
+      },
+    }),
   });
 
   if (!ttsResponse.ok) {
@@ -242,13 +242,77 @@ async function generateTTS(
     throw new Error(`TTS失败: ${ttsResponse.status} - ${errText}`);
   }
 
-  const ttsData = await ttsResponse.json();
-
-  if (ttsData.code !== 3000 || !ttsData.data) {
-    throw new Error(`TTS合成失败: ${ttsData.message || ttsData.code}`);
+  // 处理 SSE 流式响应
+  const reader = ttsResponse.body?.getReader();
+  if (!reader) {
+    throw new Error("无法读取TTS响应流");
   }
 
-  // 将 base64 音频保存到本地文件
+  const decoder = new TextDecoder();
+  let audioChunks: Buffer[] = [];
+  let hasError = false;
+  let errorMessage = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        console.log("[TTS] SSE流读取完成");
+        break;
+      }
+
+      // 解析 SSE 数据
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const data = line.substring(5).trim();
+          if (!data) continue;
+          
+          try {
+            const json = JSON.parse(data);
+            
+            // 检查错误事件
+            if (json.event === 'Error' || json.code && json.code !== 20000000) {
+              hasError = true;
+              errorMessage = json.message || json.msg || "未知错误";
+              console.error("[TTS] 错误事件:", json);
+              break;
+            }
+            
+            // 收集音频数据（event=TTSResponse）
+            if (json.event === 'TTSResponse' && json.data) {
+              const audioBuffer = Buffer.from(json.data, 'base64');
+              audioChunks.push(audioBuffer);
+              console.log(`[TTS] 收到音频块，大小: ${audioBuffer.length} bytes, 累计: ${audioChunks.length} 块`);
+            }
+          } catch (parseError) {
+            console.warn("[TTS] JSON解析失败:", data, parseError);
+          }
+        }
+      }
+      
+      if (hasError) break;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (hasError) {
+    throw new Error(`TTS合成失败: ${errorMessage}`);
+  }
+
+  if (audioChunks.length === 0) {
+    throw new Error("TTS合成失败：未收到音频数据");
+  }
+
+  // 合并所有音频块
+  const audioBuffer = Buffer.concat(audioChunks);
+  console.log(`[TTS] 音频合成完成，总大小: ${audioBuffer.length} bytes`);
+  
+  // 将音频保存到本地文件
   const fs = await import("fs");
   const path = await import("path");
   
@@ -259,10 +323,9 @@ async function generateTTS(
   
   const filename = `tts_${Date.now()}.mp3`;
   const filepath = path.join(audioDir, filename);
-  const audioBuffer = Buffer.from(ttsData.data, "base64");
   fs.writeFileSync(filepath, audioBuffer);
   
-  console.log(`[TTS] 音频已保存: ${filepath}, 大小: ${audioBuffer.length} bytes`);
+  console.log(`[TTS] 音频已保存: ${filepath}`);
   
   // 返回本地文件路径（后续需要上传到对象存储获取公网URL）
   const audioUrl = filepath;
