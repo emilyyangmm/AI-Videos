@@ -186,7 +186,7 @@ async function callVolcengineAPI(
 
 /**
  * 调用 TTS 生成音频（火山引擎语音合成）
- * 注意：火山引擎 TTS 的 Authorization 格式是 "Bearer;{token}"（无空格）
+ * 文档：https://www.volcengine.com/docs/6561/79817
  */
 async function generateTTS(
   script: string,
@@ -194,6 +194,7 @@ async function generateTTS(
 ): Promise<{ audioUrl: string; duration: number }> {
   const appId = process.env.VOLCENGINE_TTS_APP_ID || "";
   const token = process.env.VOLCENGINE_TTS_TOKEN || "";
+  const cluster = process.env.VOLCENGINE_TTS_CLUSTER || "volc_tts"; // 从环境变量读取 cluster
   const voiceType = VOICE_TYPES[voiceStyle] || VOICE_TYPES.default;
 
   if (!appId || !token) {
@@ -204,11 +205,11 @@ async function generateTTS(
     app: {
       appid: appId,
       token: token,
-      cluster: "volcano_tts",  // 通用TTS集群（字符版尝试）
+      cluster: cluster,
     },
     user: { uid: "user_001" },
     audio: {
-      voice_type: "BV700_V2_streaming",  // 通用音色
+      voice_type: voiceType,
       encoding: "mp3",
       speed_ratio: 1.0,
       volume_ratio: 1.0,
@@ -223,7 +224,10 @@ async function generateTTS(
   };
 
   console.log("[TTS] 调用火山引擎TTS API...");
-  const ttsResponse = await fetch("https://openspeech.bytedance.com/api/v1/tts", {
+  console.log("[TTS] cluster:", cluster, "voice_type:", voiceType);
+  
+  // 使用文档中的正确 URL
+  const ttsResponse = await fetch("https://openspeech.bytedance.com/tts_middle_layer/tts", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
