@@ -191,16 +191,16 @@ async function callVolcengineAPI(
 async function generateTTS(
   script: string,
   voiceStyle: string
-): Promise<{ audioUrl: string; duration: number }> {
+): Promise<string> {
   const appId = process.env.VOLCENGINE_TTS_APP_ID;
   const token = process.env.VOLCENGINE_TTS_TOKEN;
   const voiceType = VOICE_TYPES[voiceStyle] || VOICE_TYPES.default;
-
+  
   if (!appId || !token) {
     throw new Error("TTS配置缺失：请设置 VOLCENGINE_TTS_APP_ID 和 VOLCENGINE_TTS_TOKEN");
   }
-
-  console.log("[TTS] 调用火山引擎豆包语音合成模型2.0 V3 SSE API...");
+  
+  console.log("[TTS] 使用 V3 SSE 接口...");
   console.log("[TTS] voice_type:", voiceType);
   
   const response = await fetch(
@@ -233,7 +233,6 @@ async function generateTTS(
     throw new Error(`TTS失败: ${response.status} - ${err}`);
   }
 
-  // 处理 SSE 流式响应，收集所有音频 base64 数据
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   const audioChunks: Buffer[] = [];
@@ -241,46 +240,28 @@ async function generateTTS(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    
     const text = decoder.decode(value);
-    const lines = text.split("\n");
-    
-    for (const line of lines) {
+    for (const line of text.split("\n")) {
       if (line.startsWith("data: ")) {
         try {
           const json = JSON.parse(line.slice(6));
-          if (json.data) {
-            audioChunks.push(Buffer.from(json.data, "base64"));
-            console.log(`[TTS] 收到音频块，累计: ${audioChunks.length} 块`);
-          }
-        } catch (parseError) {
-          console.warn("[TTS] JSON解析失败:", line, parseError);
-        }
+          if (json.data) audioChunks.push(Buffer.from(json.data, "base64"));
+        } catch {}
       }
     }
   }
 
-  if (audioChunks.length === 0) {
-    throw new Error("TTS合成失败：未收到音频数据");
-  }
+  if (audioChunks.length === 0) throw new Error("TTS返回空音频");
 
-  // 合并所有音频块保存到本地
   const { writeFileSync, mkdirSync, existsSync } = await import("fs");
   const { join } = await import("path");
   const dir = "/tmp/veo_audio";
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  
   const filename = `tts_${Date.now()}.mp3`;
   const filepath = join(dir, filename);
-  const audioBuffer = Buffer.concat(audioChunks);
-  writeFileSync(filepath, audioBuffer);
-  
-  console.log(`[TTS] 音频已保存: ${filepath}, 大小: ${audioBuffer.length} bytes`);
-  
-  // 返回本地文件路径和预估时长
-  const duration = Math.ceil(script.length / 4.5);
-
-  return { audioUrl: filepath, duration };
+  writeFileSync(filepath, Buffer.concat(audioChunks));
+  console.log("[TTS] 音频保存到:", filepath);
+  return filepath;
 }
 
 /**
@@ -329,7 +310,8 @@ export async function POST(request: NextRequest) {
     // 第一步：生成 TTS 音频
     // ==========================================
     console.log("[数字人] 步骤1: 生成TTS音频...");
-    const { audioUrl, duration } = await generateTTS(script, voiceStyle);
+    const audioUrl = await generateTTS(script, voiceStyle);
+    const duration = Math.ceil(script.length / 4.5); // 预估时长
     console.log(`[数字人] 音频已生成，预估时长: ${duration}秒`);
 
     // ==========================================
