@@ -298,6 +298,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ========== 测试用：硬编码公网测试图片 ==========
+    // 验证流程时使用这个，图片必须是公网可访问的
+    const TEST_MODE = true;
+    const testImageUrl = "https://lf3-static.bytednsdoc.com/obj/eden-cn/vhaeh7vpxu/demo_portrait.jpg";
+    const imageUrl = TEST_MODE ? testImageUrl : portraitImage;
+    console.log(`[数字人] 使用图片URL: ${imageUrl} (测试模式: ${TEST_MODE})`);
+    // ========== 测试用 END ==========
+
     console.log(`[数字人] 开始生成，文案长度: ${script.length}`);
 
     // ==========================================
@@ -320,7 +328,7 @@ export async function POST(request: NextRequest) {
       "CVSubmitTask",
       "jimeng_realman_avatar_picture_create_role_omni_v15",
       {
-        image_url: portraitImage,
+        image_url: imageUrl,
       }
     );
 
@@ -372,7 +380,7 @@ export async function POST(request: NextRequest) {
     const videoPayload: Record<string, any> = {
       req_key: "jimeng_realman_avatar_picture_omni_v15",
       task_name: "OmniHuman1.5_video",
-      image_url: portraitImage,
+      image_url: imageUrl,
       audio_url: audioUrl,
       resolution: aspectRatio === "9:16" ? "720p" : "1080p",
     };
