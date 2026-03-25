@@ -326,12 +326,11 @@ export async function POST(request: NextRequest) {
 
     console.log("[数字人] 主体识别返回:", JSON.stringify(personDetectResult));
 
-    // 火山引擎返回格式: ResponseMetadata.Result
-    const result = personDetectResult.ResponseMetadata?.Result;
-    const taskIdStep2 = result?.task_id;
+    // 火山引擎返回格式: data.task_id
+    const taskIdStep2 = personDetectResult.data?.task_id;
     if (!taskIdStep2) {
       console.log("[数字人] 主体识别返回完整内容:", personDetectResult);
-      throw new Error(`主体识别失败：未获取到任务ID, result=${JSON.stringify(result)}`);
+      throw new Error(`主体识别失败：未获取到任务ID, result=${JSON.stringify(personDetectResult.data)}`);
     }
     console.log("[数字人] 主体识别任务已提交:", taskIdStep2);
 
@@ -349,8 +348,7 @@ export async function POST(request: NextRequest) {
 
     console.log("[数字人] 主体识别查询返回:", JSON.stringify(detectCheckResult));
 
-    const queryResult = detectCheckResult.ResponseMetadata?.Result;
-    const respData = queryResult?.resp_data;
+    const respData = detectCheckResult.data?.resp_data;
     let roleId = null;
     if (respData) {
       try {
@@ -390,8 +388,7 @@ export async function POST(request: NextRequest) {
       videoPayload
     );
 
-    const videoResultData = videoResult.ResponseMetadata?.Result;
-    const taskId = videoResultData?.task_id;
+    const taskId = videoResult.data?.task_id;
     if (!taskId) {
       console.log("[数字人] 视频生成提交返回:", JSON.stringify(videoResult));
       throw new Error("视频生成任务提交失败：未获取到任务ID");
