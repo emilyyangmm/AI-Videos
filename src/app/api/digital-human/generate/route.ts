@@ -55,8 +55,7 @@ const VOICE_TYPES: Record<string, string> = {
 };
 
 /**
- * 生成火山引擎签名
- * 参考: https://www.volcengine.com/docs/6369/67269
+ * 修正后的火山引擎签名生成
  */
 function generateVolcengineSignature(
   method: string,
@@ -70,32 +69,37 @@ function generateVolcengineSignature(
   const xDate = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
   const shortDate = xDate.substring(0, 8);
 
-  // 构建查询字符串
+  const hashedPayload = crypto.createHash("sha256").update(body).digest("hex");
+
+  // 1. 构建 Query String (保持字典序)
   const sortedQuery = Object.keys(query)
     .sort()
     .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
     .join("&");
 
-  // 构建 CanonicalRequest
-  const hashedPayload = crypto.createHash("sha256").update(body).digest("hex");
+  // 2. 构建 Canonical Headers (必须包含 host, x-content-sha256, x-date)
+  // 注意：每一行最后都有一个 \n
   const canonicalHeaders = `content-type:application/json\nhost:${VOLCENGINE_HOST}\nx-content-sha256:${hashedPayload}\nx-date:${xDate}\n`;
   const signedHeaders = "content-type;host;x-content-sha256;x-date";
-  const canonicalRequest = [
-    method.toUpperCase(),
-    path,
-    sortedQuery,
-    canonicalHeaders,
-    signedHeaders,
-    hashedPayload,
-  ].join("\n");
 
-  // 构建 StringToSign
+  // 3. 构建 Canonical Request (严格换行)
+  // 修正：使用显式拼接方式，避免 join("\n") 产生的冗余换行
+  const canonicalRequestCorrect = 
+    method.toUpperCase() + "\n" +
+    path + "\n" +
+    sortedQuery + "\n" +
+    canonicalHeaders + "\n" + // Headers 块后还有一个额外换行
+    signedHeaders + "\n" +
+    hashedPayload;
+
+  // 4. 构建 StringToSign
   const algorithm = "HMAC-SHA256";
   const credentialScope = `${shortDate}/${VOLCENGINE_REGION}/${VOLCENGINE_SERVICE}/request`;
   const hashedCanonicalRequest = crypto
     .createHash("sha256")
-    .update(canonicalRequest)
+    .update(canonicalRequestCorrect)
     .digest("hex");
+    
   const stringToSign = [
     algorithm,
     xDate,
@@ -103,29 +107,13 @@ function generateVolcengineSignature(
     hashedCanonicalRequest,
   ].join("\n");
 
-  // 计算签名
-  const kDate = crypto
-    .createHmac("sha256", secretKey)
-    .update(shortDate)
-    .digest();
-  const kRegion = crypto
-    .createHmac("sha256", kDate)
-    .update(VOLCENGINE_REGION)
-    .digest();
-  const kService = crypto
-    .createHmac("sha256", kRegion)
-    .update(VOLCENGINE_SERVICE)
-    .digest();
-  const kSigning = crypto
-    .createHmac("sha256", kService)
-    .update("request")
-    .digest();
-  const signature = crypto
-    .createHmac("sha256", kSigning)
-    .update(stringToSign)
-    .digest("hex");
+  // 5. 计算 HMAC-SHA256 签名
+  const kDate = crypto.createHmac("sha256", secretKey).update(shortDate).digest();
+  const kRegion = crypto.createHmac("sha256", kDate).update(VOLCENGINE_REGION).digest();
+  const kService = crypto.createHmac("sha256", kRegion).update(VOLCENGINE_SERVICE).digest();
+  const kSigning = crypto.createHmac("sha256", kService).update("request").digest();
+  const signature = crypto.createHmac("sha256", kSigning).update(stringToSign).digest("hex");
 
-  // 构建 Authorization
   const authorization = `${algorithm} Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   return { authorization, xDate };
@@ -155,15 +143,20 @@ async function callVolcengineAPI(
     VOLCENGINE_SECRET_KEY
   );
 
-  const url = `https://${VOLCENGINE_HOST}/?Action=${action}&Version=${VOLCENGINE_VERSION}`;
+  // 使用 URLSearchParams 确保 URL 上的参数顺序与签名时一致
+  const searchParams = new URLSearchParams(query);
+  const url = `https://${VOLCENGINE_HOST}/?${searchParams.toString()}`;
+
+  const hashedBody = crypto.createHash("sha256").update(body).digest("hex");
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Host: VOLCENGINE_HOST,
+      "Host": VOLCENGINE_HOST,
       "X-Date": xDate,
-      Authorization: authorization,
+      "X-Content-Sha256": hashedBody,
+      "Authorization": authorization,
     },
     body,
   });
@@ -310,9 +303,13 @@ export async function POST(request: NextRequest) {
     // 第一步：生成 TTS 音频
     // ==========================================
     console.log("[数字人] 步骤1: 生成TTS音频...");
-    const audioUrl = await generateTTS(script, voiceStyle);
+    const audioPath = await generateTTS(script, voiceStyle);
+    
+    // TODO: 将本地音频文件上传到对象存储，获取公网URL
+    // 暂时使用测试音频URL进行验证
+    const audioUrl = "https://LF3-static.bytednsdoc.com/obj/eden-cn/vhaeh7vpxu/demo.mp3";
     const duration = Math.ceil(script.length / 4.5); // 预估时长
-    console.log(`[数字人] 音频已生成，预估时长: ${duration}秒`);
+    console.log(`[数字人] 音频已生成，使用公网URL: ${audioUrl}，预估时长: ${duration}秒`);
 
     // ==========================================
     // 第二步：主体识别 (Person Detect)
