@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { join } from "path";
 
 // 火山引擎配置
 const VOLCENGINE_ACCESS_KEY = process.env.VOLCENGINE_ACCESS_KEY || "";
@@ -298,14 +300,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ========== 测试用：硬编码公网测试图片 ==========
-    // 验证流程时使用这个，图片必须是公网可访问的
-    const TEST_MODE = true;
-    // 使用w3schools的测试图片（已验证可访问）
-    const testImageUrl = "https://www.w3schools.com/css/img_5terre.jpg";
-    const imageUrl = TEST_MODE ? testImageUrl : portraitImage;
-    console.log(`[数字人] 使用图片URL: ${imageUrl} (测试模式: ${TEST_MODE})`);
-    // ========== 测试用 END ==========
+    // ========== 测试用：处理图片URL ==========
+    // 如果是 Data URL，先保存到 public/uploads 目录，构造公网 URL
+    let imageUrl = portraitImage;
+    if (portraitImage.startsWith('data:')) {
+      try {
+        // 去掉 Base64 头部
+        const base64Data = portraitImage.replace(/^data:image\/\w+;base64,/, "");
+        const matches = portraitImage.match(/^data:image\/(\w+);base64,/);
+        const ext = matches ? matches[1] : 'png';
+        
+        // 保存到 public/uploads 目录
+        const uploadDir = join(process.cwd(), 'public', 'uploads');
+        if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
+        
+        const fileName = `face_${Date.now()}.${ext}`;
+        const filePath = join(uploadDir, fileName);
+        writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+        
+        // 构造公网 URL
+        const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
+        imageUrl = `${domain.replace(/\/$/, '')}/uploads/${fileName}`;
+        
+        console.log(`[图片上传] 保存到: ${filePath}`);
+        console.log(`[图片上传] 公网URL: ${imageUrl}`);
+      } catch (err) {
+        console.error("[图片上传] 失败:", err);
+        throw new Error("图片处理失败: " + String(err));
+      }
+    }
+    console.log(`[数字人] 使用图片URL: ${imageUrl}`);
+    // ========== END ==========
 
     console.log(`[数字人] 开始生成，文案长度: ${script.length}`);
 
