@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
     // ==========================================
     console.log("[数字人] 步骤2: 主体识别...");
     const personDetectResult = await callVolcengineAPI(
-      "CVSyncToCVSubmitTask",
+      "CVProcess",
       "seehair_sdk_person_detect",
       {
         image_url: portraitImage,
@@ -337,7 +337,7 @@ export async function POST(request: NextRequest) {
     // ==========================================
     console.log("[数字人] 步骤3: 主体检测...");
     const detectionResult = await callVolcengineAPI(
-      "CVSyncToCVSubmitTask",
+      "CVProcess",
       "omni_human_detection",
       {
         image_url: portraitImage,
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
     }
 
     const videoResult = await callVolcengineAPI(
-      "CVSyncToCVSubmitTask",
+      "CVSubmitTask",
       "omni_human_v1.5",
       videoPayload
     );
