@@ -313,18 +313,73 @@ export async function POST(request: NextRequest) {
     console.log(`[数字人] 音频已生成，使用公网URL: ${audioUrl}，预估时长: ${duration}秒`);
 
     // ==========================================
-    // 直接提交 OmniHuman 1.5 任务
+    // 第二步：主体识别
     // ==========================================
-    console.log("[数字人] 正在提交 OmniHuman 1.5 任务...");
-    
-    const videoResult = await callVolcengineAPI(
-      "CVSyncToCVSubmitTask",
-      "omni_human_1.5",
+    console.log("[数字人] 步骤2: 主体识别...");
+    const personDetectResult = await callVolcengineAPI(
+      "CVSubmitTask",
+      "jimeng_realman_avatar_picture_create_role_omni_v15",
       {
         image_url: portraitImage,
-        audio_url: audioUrl,
-        resolution: aspectRatio === "9:16" ? "720p" : "720p",
       }
+    );
+
+    const taskIdStep2 = personDetectResult.Data?.task_id;
+    if (!taskIdStep2) {
+      throw new Error("主体识别失败：未获取到任务ID");
+    }
+    console.log("[数字人] 主体识别任务已提交:", taskIdStep2);
+
+    // 轮询等待主体识别完成
+    console.log("[数字人] 等待主体识别完成...");
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 等待3秒
+    
+    const detectCheckResult = await callVolcengineAPI(
+      "CVGetResult",
+      "jimeng_realman_avatar_picture_create_role_omni_v15",
+      {
+        task_id: taskIdStep2,
+      }
+    );
+
+    const respData = detectCheckResult.Data?.resp_data;
+    let roleId = null;
+    if (respData) {
+      try {
+        const parsed = JSON.parse(respData);
+        if (parsed.status === 1) {
+          roleId = parsed.role_id;
+          console.log("[数字人] 主体识别完成, role_id:", roleId);
+        } else {
+          console.log("[数字人] 主体识别结果: 不包含人/类人主体");
+        }
+      } catch (e) {
+        console.log("[数字人] 解析识别结果失败");
+      }
+    }
+
+    // ==========================================
+    // 第三步：提交视频生成任务
+    // ==========================================
+    console.log("[数字人] 步骤3: 提交 OmniHuman 1.5 视频生成任务...");
+    
+    const videoPayload: Record<string, any> = {
+      req_key: "jimeng_realman_avatar_picture_omni_v15",
+      task_name: "OmniHuman1.5_video",
+      image_url: portraitImage,
+      audio_url: audioUrl,
+      resolution: aspectRatio === "9:16" ? "720p" : "1080p",
+    };
+
+    // 如果有 role_id，添加到请求中
+    if (roleId) {
+      videoPayload.role_id = roleId;
+    }
+
+    const videoResult = await callVolcengineAPI(
+      "CVSubmitTask",
+      "jimeng_realman_avatar_picture_omni_v15",
+      videoPayload
     );
 
     const taskId = videoResult.Data?.task_id;
