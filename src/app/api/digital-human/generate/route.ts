@@ -6,7 +6,8 @@ const VOLCENGINE_ACCESS_KEY = process.env.VOLCENGINE_ACCESS_KEY || "";
 const VOLCENGINE_SECRET_KEY = process.env.VOLCENGINE_SECRET_KEY || "";
 
 // 火山引擎 API 配置
-const VOLCENGINE_SERVICE = "visual";
+// 这里的配置必须完全一致，一个字母都不要改
+const VOLCENGINE_SERVICE = "cv"; // 这里的 cv 是火山网关的唯一标识符
 const VOLCENGINE_REGION = "cn-north-1";
 const VOLCENGINE_HOST = "visual.volcengineapi.com";
 const VOLCENGINE_VERSION = "2022-08-31";

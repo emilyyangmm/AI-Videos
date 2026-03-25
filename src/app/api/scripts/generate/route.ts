@@ -242,15 +242,18 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // 暴力裁剪：强制字数达标
+    const durationLimit = DURATION_WORD_COUNT[duration] || DURATION_WORD_COUNT[30];
+
+    if (scriptData.script && scriptData.script.length > durationLimit.max) {
+      console.log(`[系统拦截] ${duration}秒视频不能有 ${scriptData.script.length} 个字，正在暴力裁剪...`);
+      // 强制截断到最大字数
+      scriptData.script = scriptData.script.substring(0, durationLimit.max);
+    }
+
     // 验证字数
     let finalScript = scriptData.script || "";
     const actualWordCount = finalScript.length;
-    
-    // 移除暴力裁剪，让AI自己控制
-    // 如果超标严重（超过50%），记录警告但不破坏文案
-    if (actualWordCount > wordCount.max * 1.5) {
-      console.error(`字数严重超标: ${actualWordCount} > ${wordCount.max * 1.5}，AI可能未遵守指令`);
-    }
     
     // 字数检查结果
     const isWordCountValid = actualWordCount >= wordCount.min && actualWordCount <= wordCount.max;
