@@ -178,6 +178,7 @@ export async function POST(request: NextRequest) {
       viralElements, 
       selectedHooks,
       videoDuration,
+      duration: durationParam,
       topic 
     } = body;
 
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
     }
 
     const scriptKey = scriptType || "teach";
-    const duration = videoDuration || 30;
+    const duration = durationParam || videoDuration || 30;
     const elements = viralElements || [];
     const hooks = selectedHooks || [];
 
