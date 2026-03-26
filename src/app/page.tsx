@@ -327,7 +327,6 @@ export default function Home() {
   const [selectedElements, setSelectedElements] = useState<string[]>([]); // 选中的爆款元素
   const [selectedHooks, setSelectedHooks] = useState<string[]>([]); // 用户勾选的钩子词根
   const [portraitImage, setPortraitImage] = useState<string | null>(null); // 人像图片
-  const [backgroundImage, setBackgroundImage] = useState<string | null>(null); // 背景图片
   const [motionStyle, setMotionStyle] = useState<string>("friendly"); // 动作风格
   const [voiceStyle, setVoiceStyle] = useState<string>("zh_female_vv_uranus_bigtts"); // 声音风格
   const [digitalHumanTaskId, setDigitalHumanTaskId] = useState<string | null>(null); // 数字人任务ID
@@ -1195,43 +1194,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* 背景图片（可选） */}
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium">🖼️ 背景图片（可选）</label>
-                    <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                      {backgroundImage ? (
-                        <div className="relative">
-                          <img src={backgroundImage} alt="背景" className="max-h-40 mx-auto rounded-lg" />
-                          <Button 
-                            variant="destructive" 
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={() => setBackgroundImage(null)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div>
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  setBackgroundImage(ev.target?.result as string);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* 生成按钮 */}
                   <Button
                     onClick={async () => {
@@ -1254,7 +1216,6 @@ export default function Home() {
                             script: script.script,
                             voiceStyle,
                             motionStyle,
-                            backgroundImage,
                             aspectRatio
                           })
                         });
