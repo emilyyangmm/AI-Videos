@@ -1077,6 +1077,10 @@ export default function Home() {
                       <ChevronLeft className="w-4 h-4 mr-2" />
                       返回选题
                     </Button>
+                    <Button variant="outline" onClick={generateScript} disabled={loading} className="flex-1">
+                      {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                      重新生成
+                    </Button>
                     <Button 
                       onClick={() => setCurrentStepWithTrack(6)} 
                       disabled={!script}
