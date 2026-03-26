@@ -242,15 +242,21 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // 暴力裁剪：强制字数达标
+    // 智能裁剪：按句子截断，保持文案完整
     const durationLimit = DURATION_WORD_COUNT[duration] || DURATION_WORD_COUNT[30];
-
     if (scriptData.script && scriptData.script.length > durationLimit.max) {
-      console.log(`[系统拦截] ${duration}秒视频不能有 ${scriptData.script.length} 个字，正在暴力裁剪...`);
-      // 强制截断到最大字数
-      scriptData.script = scriptData.script.substring(0, durationLimit.max);
+      console.log(`[系统拦截] ${duration}秒视频不能有 ${scriptData.script.length} 个字，正在智能裁剪...`);
+      const sentences = scriptData.script.split(/(?<=[。！？，,!?])/);
+      let result = "";
+      for (const s of sentences) {
+        if ((result + s).length <= durationLimit.max) {
+          result += s;
+        } else {
+          break;
+        }
+      }
+      scriptData.script = result || scriptData.script.substring(0, durationLimit.max);
     }
-
     // 验证字数
     let finalScript = scriptData.script || "";
     const actualWordCount = finalScript.length;
