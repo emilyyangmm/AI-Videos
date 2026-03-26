@@ -177,8 +177,7 @@ export async function POST(request: NextRequest) {
       scriptType, 
       viralElements, 
       selectedHooks,
-      videoDuration,
-      duration: durationParam,
+      videoDuration, duration: durationParam,
       topic 
     } = body;
 
