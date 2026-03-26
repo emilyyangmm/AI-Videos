@@ -410,7 +410,7 @@ export async function POST(request: NextRequest) {
       task_name: "OmniHuman1.5_video",
       image_url: imageUrl,
       audio_url: audioUrl,
-      resolution: aspectRatio === "9:16" ? "720p" : "1080p",
+      output_resolution: aspectRatio === "9:16" ? 720 : 1080,
     };
 
     // 如果有 role_id，添加到请求中
