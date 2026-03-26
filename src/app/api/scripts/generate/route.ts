@@ -211,51 +211,46 @@ export async function POST(request: NextRequest) {
 
 重要：请先生成脚本，然后自己检查字数。如果超过 ${wordCount.max} 字，请主动删除冗余内容，确保字数在 ${wordCount.min}-${wordCount.max} 之间。`;
 
-    // 调用Gemini
-    const responseText = await callGemini(
-      buildChatPrompt(
-        getSystemPrompt(userIndustry, videoGoal, scriptKey, elements, hooks, duration), 
-        userPrompt
-      )
-    );
-
-    // 解析JSON
-    let scriptData;
-    try {
-      const content = responseText;
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
-                        content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-      scriptData = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error("JSON解析错误:", parseError);
-      // 如果解析失败，使用原始文本
-      scriptData = {
-        title: "口播脚本",
-        script: responseText,
-        wordCount: responseText.length,
-        estimatedDuration: Math.ceil(responseText.length / 4.5),
-        openingHook: responseText.substring(0, 30),
-        mainContent: responseText.substring(30),
-        closingCTA: "",
-        usedHooks: []
-      };
-    }
-
-    // 智能裁剪：按句子截断，保持文案完整
     const durationLimit = DURATION_WORD_COUNT[duration] || DURATION_WORD_COUNT[30];
-    if (scriptData.script && scriptData.script.length > durationLimit.max) {
-      console.log(`[系统拦截] ${duration}秒视频不能有 ${scriptData.script.length} 个字，正在智能裁剪...`);
-      const sentences = scriptData.script.split(/(?<=[。！？，,!?])/);
-      let result = "";
-      for (const s of sentences) {
-        if ((result + s).length <= durationLimit.max) {
-          result += s;
-        } else {
-          break;
-        }
+    
+    // 解析函数
+    const parseScript = (text: string) => {
+      try {
+        const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : text;
+        return JSON.parse(jsonStr);
+      } catch {
+        return { title: "口播脚本", script: text, wordCount: text.length, estimatedDuration: Math.ceil(text.length / 4.5), openingHook: text.substring(0, 30), mainContent: text.substring(30), closingCTA: "", usedHooks: [] };
       }
-      scriptData.script = result || scriptData.script.substring(0, durationLimit.max);
+    };
+
+    // 第一次生成
+    let responseText = await callGemini(buildChatPrompt(getSystemPrompt(userIndustry, videoGoal, scriptKey, elements, hooks, duration), userPrompt));
+    let scriptData = parseScript(responseText);
+
+    // 如果超字数，自动重试一次
+    if (scriptData.script && scriptData.script.length > durationLimit.max) {
+      console.log(`[重试] 第一次生成${scriptData.script.length}字，超出${durationLimit.max}字限制，正在重新生成...`);
+      const retryPrompt = `上次生成的文案有${scriptData.script.length}字，严重超出${duration}秒视频的${durationLimit.max}字上限！
+请重新生成，这次必须严格控制在${durationLimit.min}-${durationLimit.max}字之间，删掉所有不必要的铺垫和废话，保持文案完整且有结尾。
+${userPrompt}`;
+      const retryText = await callGemini(buildChatPrompt(getSystemPrompt(userIndustry, videoGoal, scriptKey, elements, hooks, duration), retryPrompt));
+      const retryData = parseScript(retryText);
+      if (retryData.script && retryData.script.length <= durationLimit.max) {
+        scriptData = retryData;
+        console.log(`[重试成功] 重新生成${retryData.script.length}字，符合要求`);
+      } else {
+        console.log(`[重试失败] 重新生成仍有${retryData.script?.length}字，使用智能裁剪`);
+        scriptData = retryData;
+        // 智能裁剪兜底
+        const sentences = scriptData.script.split(/(?<=[。！？，,!?])/);
+        let result = "";
+        for (const s of sentences) {
+          if ((result + s).length <= durationLimit.max) result += s;
+          else break;
+        }
+        scriptData.script = result || scriptData.script.substring(0, durationLimit.max);
+      }
     }
     // 验证字数
     let finalScript = scriptData.script || "";
