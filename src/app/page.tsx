@@ -92,7 +92,7 @@ const MERCHANT_TYPES = [
     icon: "🛍️",
     examples: "淘宝/抖音小店、跨境电商",
     goal: "直接转化，展示产品卖点",
-    recommendedDuration: [15, 45],
+    recommendedDuration: [30, 45],
     recommendedElements: "成本+人群+最差",
     style: "快节奏、直击痛点、强转化导向"
   },
@@ -102,7 +102,7 @@ const MERCHANT_TYPES = [
     icon: "🏪",
     examples: "餐饮、美业、教育、本地生活",
     goal: "引流到店，展示环境/服务",
-    recommendedDuration: [15, 30],
+    recommendedDuration: [30, 45],
     recommendedElements: "人群+猎奇+怀旧",
     style: "生活化、真实感、引流导向"
   },
@@ -306,9 +306,9 @@ const VOICE_OPTIONS = [
 
 // 时长对应字数
 const DURATION_WORD_COUNT: Record<number, { min: number; max: number }> = {
-  15: { min: 55, max: 75 },
   30: { min: 110, max: 140 },
-  45: { min: 170, max: 210 }
+  45: { min: 170, max: 210 },
+  60: { min: 230, max: 270 }
 };
 
 export default function Home() {
@@ -360,7 +360,7 @@ export default function Home() {
     
     // 根据目的推荐
     if (goalLower.includes("卖") || goalLower.includes("转化") || goalLower.includes("到店")) {
-      return 15; // 转化类推荐短视频
+      return 30; // 转化类推荐短视频
     }
     if (goalLower.includes("涨粉") || goalLower.includes("品牌") || goalLower.includes("认知")) {
       return 45; // 品牌类推荐长视频
@@ -371,7 +371,7 @@ export default function Home() {
     
     // 根据行业推荐
     if (industryLower.includes("美妆") || industryLower.includes("穿搭") || industryLower.includes("美食")) {
-      return 15; // 视觉类短
+      return 30; // 视觉类短
     }
     if (industryLower.includes("教育") || industryLower.includes("知识") || industryLower.includes("职场")) {
       return 45; // 知识类长
@@ -618,7 +618,7 @@ export default function Home() {
                       )}
                     </div>
                     <div className="flex gap-3">
-                      {[15, 30, 45].map((duration) => (
+                      {[30, 45, 60].map((duration) => (
                         <button
                           key={duration}
                           onClick={() => setVideoDuration(duration)}

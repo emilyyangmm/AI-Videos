@@ -70,9 +70,9 @@ const VIRAL_ELEMENTS: Record<string, { name: string; description: string; hooks:
 
 // 时长对应字数
 const DURATION_WORD_COUNT: Record<number, { min: number; max: number }> = {
-  15: { min: 55, max: 75 },
   30: { min: 110, max: 140 },
-  45: { min: 170, max: 210 }
+  45: { min: 170, max: 210 },
+  60: { min: 230, max: 270 }
 };
 
 const getSystemPrompt = (
