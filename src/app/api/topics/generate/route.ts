@@ -154,10 +154,11 @@ export async function POST(request: NextRequest) {
       videoGoal,
       selectedHooks,
       viralElements,
-      videoDuration 
+      videoDuration,
+      duration: durationParam 
     } = body;
     
-    const duration = videoDuration || 30;
+    const duration = durationParam || videoDuration || 30;
 
     if (!userIndustry || !videoGoal) {
       return NextResponse.json(
@@ -229,10 +230,11 @@ export async function PUT(request: NextRequest) {
       videoGoal,
       selectedHooks,
       viralElements,
-      videoDuration 
+      videoDuration,
+      duration: durationParam 
     } = body;
     
-    const duration = videoDuration || 30;
+    const duration = durationParam || videoDuration || 30;
 
     if (!userIndustry || !videoGoal) {
       return NextResponse.json(
