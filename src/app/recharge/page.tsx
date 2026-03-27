@@ -172,14 +172,14 @@ export default function RechargePage() {
             {/* 二维码 */}
             <div className="flex justify-center">
               <div className="bg-white p-4 rounded-lg border-2 border-dashed">
-                <img
-                  src="/alipay-qrcode.jpg"
-                  alt="支付宝收款码"
-                  className="w-48 h-48 object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+                <div className="w-48 h-48 flex items-center justify-center bg-gray-100 rounded">
+                  <p className="text-gray-500 text-sm">收款码加载中</p>
+                </div>
+                {/* <img */}
+                {/*   src="/alipay-qrcode.jpg" */}
+                {/*   alt="支付宝收款码" */}
+                {/*   className="w-48 h-48 object-contain" */}
+                {/* /> */}
                 <p className="text-center text-sm text-gray-500 mt-2">请扫码转账</p>
               </div>
             </div>
