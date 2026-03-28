@@ -39,19 +39,8 @@ export async function POST(request: NextRequest) {
       imagePaths.push(imgPath);
     }
 
-    // 生成 ffmpeg 输入文件列表
-    const listPath = join(tmpDir, "list.txt");
-    // concat demuxer 格式：每张图片两行（file + duration），最后一张图片需要重复一次
-    let listContent = "";
-    for (let i = 0; i < imagePaths.length; i++) {
-      listContent += `file '${imagePaths[i]}'\n`;
-      listContent += `duration ${duration}\n`;
-    }
-    // 最后一张图片重复一次（不加 duration）
-    listContent += `file '${imagePaths[imagePaths.length - 1]}'\n`;
-    writeFileSync(listPath, listContent);
-
-    console.log("[混剪] list.txt内容:", listContent);
+    // 计算总时长
+    const totalDuration = images.length * duration;
 
     // 输出视频路径
     const outputDir = join(process.cwd(), "public", "uploads");
@@ -67,26 +56,39 @@ export async function POST(request: NextRequest) {
       throw new Error(`BGM文件不存在: ${bgmPath}，请先上传BGM文件`);
     }
 
-    // 计算总时长
-    const totalDuration = images.length * duration;
+    // list.txt 路径（用于拼接）
+    const listPath = join(tmpDir, "list.txt");
 
-    // ffmpeg 合成命令：图片 -> 视频片段 -> 拼接 + 添加BGM
-    // 使用 fps 过滤器确保帧率稳定，使用 scale + pad 确保 9:16 竖屏
-    const ffmpegCmd = `ffmpeg -f concat -safe 0 -i "${listPath}" -i "${bgmPath}" \
-      -vf "fps=30,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black" \
-      -c:v libx264 -preset fast -crf 23 \
-      -c:a aac -b:a 128k \
-      -shortest -t ${totalDuration} \
-      -y "${outputPath}" 2>&1`;
+    // 第一步：把每张图片转成独立视频片段
+    console.log("[混剪] 第一步：生成视频片段...");
+    const segPaths: string[] = [];
+    for (let i = 0; i < imagePaths.length; i++) {
+      const segPath = join(tmpDir, `seg_${i}.mp4`);
+      console.log(`[混剪] 处理图片 ${i + 1}/${images.length}`);
+      execSync(
+        `ffmpeg -loop 1 -i "${imagePaths[i]}" -vf "fps=30,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p" -t ${duration} -c:v libx264 -preset fast -y "${segPath}" 2>&1`,
+        { timeout: 60000, stdio: "pipe" }
+      );
+      segPaths.push(segPath);
+    }
 
-    console.log("[混剪] 开始合成...");
-    console.log("[混剪] 命令:", ffmpegCmd);
+    // 第二步：生成拼接列表
+    console.log("[混剪] 第二步：生成拼接列表...");
+    const concatContent = segPaths.map(p => `file '${p}'`).join("\n");
+    writeFileSync(listPath, concatContent);
+    console.log("[混剪] 拼接列表:", concatContent);
 
-    execSync(ffmpegCmd, { timeout: 180000, stdio: "pipe" });
+    // 第三步：拼接视频并加BGM
+    console.log("[混剪] 第三步：拼接视频并添加BGM...");
+    execSync(
+      `ffmpeg -f concat -safe 0 -i "${listPath}" -i "${bgmPath}" -c:v copy -c:a aac -b:a 128k -shortest -y "${outputPath}" 2>&1`,
+      { timeout: 120000, stdio: "pipe" }
+    );
 
     // 清理临时文件
     try {
       for (const p of imagePaths) unlinkSync(p);
+      for (const p of segPaths) unlinkSync(p);
       unlinkSync(listPath);
       unlinkSync(tmpDir);
     } catch (e) { /* 忽略清理错误 */ }
