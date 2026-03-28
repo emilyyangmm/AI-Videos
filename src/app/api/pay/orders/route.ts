@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // 验证管理员密码
-    const { searchParams } = new URL(request.url);
-    const password = searchParams.get("password") || "";
+    const { password } = await request.json();
 
     if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
       return NextResponse.json({ success: false, error: "密码错误" }, { status: 401 });

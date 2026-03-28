@@ -154,6 +154,13 @@ async function queryTaskStatus(taskId: string): Promise<any> {
  */
 export async function GET(request: NextRequest) {
   try {
+    // 登录验证
+    const { getUserFromRequest } = await import("@/lib/auth");
+    const userInfo = getUserFromRequest(request);
+    if (!userInfo) {
+      return NextResponse.json({ success: false, error: "请先登录" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
 

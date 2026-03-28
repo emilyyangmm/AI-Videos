@@ -526,6 +526,23 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // 返回任务信息
     // ==========================================
+
+    // 异步清理1小时前的上传文件（不阻塞主流程）
+    setTimeout(async () => {
+      try {
+        const { readdirSync, statSync, unlinkSync } = await import('fs');
+        const uploadDir = join(process.cwd(), 'public', 'uploads');
+        const files = readdirSync(uploadDir);
+        const oneHourAgo = Date.now() - 60 * 60 * 1000;
+        files.forEach(file => {
+          const filePath = join(uploadDir, file);
+          if (statSync(filePath).mtimeMs < oneHourAgo) {
+            unlinkSync(filePath);
+          }
+        });
+      } catch {}
+    }, 0);
+
     return NextResponse.json({
       success: true,
       task_id: taskId,

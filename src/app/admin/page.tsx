@@ -32,7 +32,11 @@ export default function AdminPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/pay/orders?password=${encodeURIComponent(password)}`);
+      const res = await fetch('/api/pay/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
       const data = await res.json();
 
       if (data.success) {
