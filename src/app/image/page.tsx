@@ -1,23 +1,18 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Upload, X, Download, Image, Wand2 } from "lucide-react";
 
 export default function ImagePage() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [prompt, setPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [status, setStatus] = useState<"idle" | "generating" | "done" | "failed">("idle");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   // 处理图片上传
@@ -62,12 +57,9 @@ export default function ImagePage() {
     }
 
     setLoading(true);
-    setStatus("generating");
-    setImageUrls([]);
-    setTaskId(null);
+    setImageUrl(null);
 
     try {
-      // 提交生成任务
       const res = await fetch("/api/image/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,69 +69,30 @@ export default function ImagePage() {
 
       if (!data.success) {
         toast.error(data.error || "生成失败");
-        setStatus("idle");
         setLoading(false);
         return;
       }
 
-      setTaskId(data.task_id);
-      toast.success("图片生成中，请稍候...");
-
-      // 轮询查询状态
-      pollStatus(data.task_id);
+      setImageUrl(data.image_url);
+      toast.success("图片生成成功！");
 
     } catch (error) {
       toast.error("生成失败");
-      setStatus("failed");
+    } finally {
       setLoading(false);
     }
   };
 
-  // 轮询状态
-  const pollStatus = async (id: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/image/status?taskId=${id}`);
-        const data = await res.json();
-
-        if (data.success) {
-          if (data.status === "done") {
-            setImageUrls(data.image_urls || []);
-            setStatus("done");
-            setLoading(false);
-            clearInterval(interval);
-            toast.success("图片生成完成！");
-          } else if (data.status === "failed") {
-            setStatus("failed");
-            setLoading(false);
-            clearInterval(interval);
-            toast.error("图片生成失败");
-          }
-        }
-      } catch (error) {
-        console.error("轮询状态失败:", error);
-      }
-    }, 3000);
-
-    // 最多轮询5分钟
-    setTimeout(() => {
-      clearInterval(interval);
-      if (status === "generating") {
-        setLoading(false);
-        toast.error("生成超时，请重试");
-      }
-    }, 5 * 60 * 1000);
-  };
-
   // 下载图片
-  const downloadImage = async (url: string, index: number) => {
+  const downloadImage = async () => {
+    if (!imageUrl) return;
     try {
-      const response = await fetch(url);
+      const response = await fetch(imageUrl);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `ai-image-${index + 1}.png`;
+      link.download = `ai-image-${Date.now()}.png`;
       link.click();
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
@@ -151,9 +104,7 @@ export default function ImagePage() {
   const reset = () => {
     setPrompt("");
     setReferenceImage(null);
-    setImageUrls([]);
-    setTaskId(null);
-    setStatus("idle");
+    setImageUrl(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -266,7 +217,7 @@ export default function ImagePage() {
                   </>
                 )}
               </Button>
-              {(status === "done" || status === "failed") && (
+              {imageUrl && (
                 <Button variant="outline" onClick={reset}>
                   重新生成
                 </Button>
@@ -275,54 +226,40 @@ export default function ImagePage() {
           </CardContent>
         </Card>
 
-        {/* 生成中的加载动画 */}
-        {status === "generating" && (
+        {/* 加载动画 */}
+        {loading && (
           <Card>
             <CardContent className="py-12 text-center">
               <Loader2 className="w-12 h-12 mx-auto mb-4 text-purple-600 animate-spin" />
               <p className="text-gray-500">AI 正在生成图片，请稍候...</p>
-              <p className="text-xs text-gray-400 mt-2">通常需要 10-30 秒</p>
             </CardContent>
           </Card>
         )}
 
         {/* 生成的图片 */}
-        {status === "done" && imageUrls.length > 0 && (
+        {imageUrl && !loading && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">生成结果</CardTitle>
               <CardDescription>点击下载按钮保存图片</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {imageUrls.map((url, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={url}
-                      alt={`生成图片 ${index + 1}`}
-                      className="w-full rounded-lg"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => downloadImage(url, index)}
-                    >
-                      <Download className="w-4 h-4 mr-1" />
-                      下载
-                    </Button>
-                  </div>
-                ))}
+              <div className="relative group">
+                <img
+                  src={imageUrl}
+                  alt="生成的图片"
+                  className="w-full rounded-lg"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute bottom-4 right-4"
+                  onClick={downloadImage}
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  下载
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 失败提示 */}
-        {status === "failed" && (
-          <Card>
-            <CardContent className="py-8 text-center text-red-500">
-              图片生成失败，请重试
             </CardContent>
           </Card>
         )}
