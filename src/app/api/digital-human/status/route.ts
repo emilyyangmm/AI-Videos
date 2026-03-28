@@ -12,8 +12,7 @@ const VOLCENGINE_HOST = "visual.volcengineapi.com";
 const VOLCENGINE_VERSION = "2022-08-31";
 
 /**
- * 生成火山引擎签名
- * 参考: https://www.volcengine.com/docs/6369/67269
+ * 修正后的火山引擎签名生成（与 generate/route.ts 完全一致）
  */
 function generateVolcengineSignature(
   method: string,
@@ -27,32 +26,37 @@ function generateVolcengineSignature(
   const xDate = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
   const shortDate = xDate.substring(0, 8);
 
-  // 构建查询字符串
+  const hashedPayload = crypto.createHash("sha256").update(body).digest("hex");
+
+  // 1. 构建 Query String (保持字典序)
   const sortedQuery = Object.keys(query)
     .sort()
     .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
     .join("&");
 
-  // 构建 CanonicalRequest
-  const hashedPayload = crypto.createHash("sha256").update(body).digest("hex");
+  // 2. 构建 Canonical Headers (必须包含 host, x-content-sha256, x-date)
   const canonicalHeaders = `content-type:application/json\nhost:${VOLCENGINE_HOST}\nx-content-sha256:${hashedPayload}\nx-date:${xDate}\n`;
   const signedHeaders = "content-type;host;x-content-sha256;x-date";
+
+  // 3. 构建 Canonical Request (简化版，减少换行符错误风险)
+  // CanonicalRequest 的各部分之间只有一个 \n
   const canonicalRequest = [
     method.toUpperCase(),
     path,
     sortedQuery,
-    canonicalHeaders,
+    canonicalHeaders, // 这里末尾已经带了一个 \n
     signedHeaders,
-    hashedPayload,
+    hashedPayload
   ].join("\n");
 
-  // 构建 StringToSign
+  // 4. 构建 StringToSign
   const algorithm = "HMAC-SHA256";
   const credentialScope = `${shortDate}/${VOLCENGINE_REGION}/${VOLCENGINE_SERVICE}/request`;
   const hashedCanonicalRequest = crypto
     .createHash("sha256")
     .update(canonicalRequest)
     .digest("hex");
+    
   const stringToSign = [
     algorithm,
     xDate,
@@ -60,47 +64,32 @@ function generateVolcengineSignature(
     hashedCanonicalRequest,
   ].join("\n");
 
-  // 计算签名
-  const kDate = crypto
-    .createHmac("sha256", secretKey)
-    .update(shortDate)
-    .digest();
-  const kRegion = crypto
-    .createHmac("sha256", kDate)
-    .update(VOLCENGINE_REGION)
-    .digest();
-  const kService = crypto
-    .createHmac("sha256", kRegion)
-    .update(VOLCENGINE_SERVICE)
-    .digest();
-  const kSigning = crypto
-    .createHmac("sha256", kService)
-    .update("request")
-    .digest();
-  const signature = crypto
-    .createHmac("sha256", kSigning)
-    .update(stringToSign)
-    .digest("hex");
+  // 5. 计算 HMAC-SHA256 签名
+  const kDate = crypto.createHmac("sha256", secretKey).update(shortDate).digest();
+  const kRegion = crypto.createHmac("sha256", kDate).update(VOLCENGINE_REGION).digest();
+  const kService = crypto.createHmac("sha256", kRegion).update(VOLCENGINE_SERVICE).digest();
+  const kSigning = crypto.createHmac("sha256", kService).update("request").digest();
+  const signature = crypto.createHmac("sha256", kSigning).update(stringToSign).digest("hex");
 
-  // 构建 Authorization
   const authorization = `${algorithm} Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   return { authorization, xDate };
 }
 
 /**
- * 查询火山引擎任务状态
+ * 调用火山引擎 API（与 generate/route.ts 完全一致）
  */
-async function queryTaskStatus(taskId: string): Promise<any> {
+async function callVolcengineAPI(
+  action: string,
+  reqKey: string,
+  payload: Record<string, any>
+): Promise<any> {
   const path = "/";
   const query: Record<string, string> = {
-    Action: "CVGetResult",
+    Action: action,
     Version: VOLCENGINE_VERSION,
   };
-  const body = JSON.stringify({
-    req_key: "omni_human_v1.5",
-    task_id: taskId,
-  });
+  const body = JSON.stringify({ req_key: reqKey, ...payload });
 
   const { authorization, xDate } = generateVolcengineSignature(
     "POST",
@@ -111,15 +100,20 @@ async function queryTaskStatus(taskId: string): Promise<any> {
     VOLCENGINE_SECRET_KEY
   );
 
-  const url = `https://${VOLCENGINE_HOST}/?Action=CVGetResult&Version=${VOLCENGINE_VERSION}`;
+  // 使用 URLSearchParams 确保 URL 上的参数顺序与签名时一致
+  const searchParams = new URLSearchParams(query);
+  const url = `https://${VOLCENGINE_HOST}/?${searchParams.toString()}`;
+
+  const hashedBody = crypto.createHash("sha256").update(body).digest("hex");
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Host: VOLCENGINE_HOST,
+      "Host": VOLCENGINE_HOST,
       "X-Date": xDate,
-      Authorization: authorization,
+      "X-Content-Sha256": hashedBody,
+      "Authorization": authorization,
     },
     body,
   });
@@ -130,7 +124,7 @@ async function queryTaskStatus(taskId: string): Promise<any> {
   }
 
   const data = await response.json();
-
+  
   if (data.ResponseMetadata?.Error) {
     throw new Error(
       `火山引擎API错误: ${data.ResponseMetadata.Error.Code} - ${data.ResponseMetadata.Error.Message}`
@@ -138,6 +132,20 @@ async function queryTaskStatus(taskId: string): Promise<any> {
   }
 
   return data;
+}
+
+/**
+ * 查询火山引擎任务状态
+ * 注意：CVGetResult 的 req_key 应该与提交任务时一致
+ */
+async function queryTaskStatus(taskId: string): Promise<any> {
+  // 使用 omni_v15 的 req_key 来查询（与 generate/route.ts 一致）
+  const result = await callVolcengineAPI(
+    "CVGetResult",
+    "jimeng_realman_avatar_picture_omni_v15",
+    { task_id: taskId }
+  );
+  return result;
 }
 
 /**
@@ -159,7 +167,14 @@ export async function GET(request: NextRequest) {
     console.log(`[数字人状态] 查询任务: ${taskId}`);
 
     // 查询任务状态
-    const result = await queryTaskStatus(taskId);
+    let result;
+    try {
+      result = await queryTaskStatus(taskId);
+      console.log(`[数字人状态] API返回:`, JSON.stringify(result).substring(0, 500));
+    } catch (apiError) {
+      console.error(`[数字人状态] API调用失败:`, apiError);
+      throw apiError;
+    }
 
     const status = result.data?.status;
     const videoUrl = result.data?.video_url;
