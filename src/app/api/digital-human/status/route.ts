@@ -94,7 +94,7 @@ function generateVolcengineSignature(
 async function queryTaskStatus(taskId: string): Promise<any> {
   const path = "/";
   const query: Record<string, string> = {
-    Action: "CVSyncToCVGetResult",
+    Action: "CVGetResult",
     Version: VOLCENGINE_VERSION,
   };
   const body = JSON.stringify({
@@ -111,7 +111,7 @@ async function queryTaskStatus(taskId: string): Promise<any> {
     VOLCENGINE_SECRET_KEY
   );
 
-  const url = `https://${VOLCENGINE_HOST}/?Action=CVSyncToCVGetResult&Version=${VOLCENGINE_VERSION}`;
+  const url = `https://${VOLCENGINE_HOST}/?Action=CVGetResult&Version=${VOLCENGINE_VERSION}`;
 
   const response = await fetch(url, {
     method: "POST",

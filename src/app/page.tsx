@@ -252,40 +252,53 @@ const VIRAL_ELEMENTS = [
 // 动作风格（步骤6选择）
 const MOTION_STYLES = [
   {
-    id: "enthusiastic",
+    id: "shopping",
     title: "热情推荐",
     icon: "🎉",
     description: "自信走向镜头，举手展示产品，充满活力",
-    prompt: "Enthusiastically walking towards camera, raising hand to show product, energetic smile"
   },
   {
     id: "professional",
     title: "专业讲解",
     icon: "👔",
     description: "保持稳定姿态，手势配合讲解，专注认真",
-    prompt: "Stable posture, hand gestures for explanation, focused and serious expression"
   },
   {
     id: "friendly",
     title: "亲切聊天",
     icon: "😊",
     description: "自然放松肢体，轻微点头，亲切微笑",
-    prompt: "Natural relaxed body language, slight nodding, friendly smile"
   },
   {
-    id: "surprise",
-    title: "惊喜揭秘",
-    icon: "😲",
-    description: "夸张惊讶表情，配合快速手势，制造悬念",
-    prompt: "Exaggerated surprised expression, quick hand gestures, creating suspense"
+    id: "excited",
+    title: "激情促销",
+    icon: "🔥",
+    description: "先做惊喜表情，然后充满激情说话，情绪高涨",
   },
   {
-    id: "authoritative",
-    title: "权威背书",
+    id: "authority",
+    title: "权威发布",
     icon: "🏛️",
-    description: "挺拔自信站姿，稳重手势，严肃专业",
-    prompt: "Confident upright posture, steady gestures, serious and professional expression"
-  }
+    description: "挺拔站立，神情严肃专业，稳重有力",
+  },
+  {
+    id: "news",
+    title: "新闻播报",
+    icon: "📺",
+    description: "正对镜头坐姿，沉稳自然，语态严谨",
+  },
+  {
+    id: "funny",
+    title: "轻松幽默",
+    icon: "😄",
+    description: "夸张惊讶表情，眉头高挑，俏皮手势",
+  },
+  {
+    id: "gentle",
+    title: "治愈温柔",
+    icon: "🌸",
+    description: "神情温柔，轻声说话，舒缓动作，侧头微笑",
+  },
 ];
 
 // 豆包语音合成模型2.0音色列表（字符版，用户实际开通的音色）
