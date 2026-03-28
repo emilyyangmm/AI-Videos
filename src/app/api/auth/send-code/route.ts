@@ -9,6 +9,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "手机号格式不正确" }, { status: 400 });
     }
 
+    // 检查1分钟内是否已发送过
+    const recentCode = await prisma.smsCode.findFirst({
+      where: {
+        phone,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) }
+      }
+    });
+    if (recentCode) {
+      return NextResponse.json(
+        { success: false, error: "发送太频繁，请1分钟后再试" },
+        { status: 429 }
+      );
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiredAt = new Date(Date.now() + 5 * 60 * 1000);
 

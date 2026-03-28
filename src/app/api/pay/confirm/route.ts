@@ -10,8 +10,8 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     const password = authHeader?.replace("Bearer ", "") || "";
 
-    if (password !== ADMIN_PASSWORD) {
-      return NextResponse.json({ success: false, error: "管理员密码错误" }, { status: 401 });
+    if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
+      return NextResponse.json({ success: false, error: "密码错误" }, { status: 401 });
     }
 
     if (!orderId || !action) {
