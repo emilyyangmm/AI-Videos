@@ -41,17 +41,17 @@ export async function POST(request: NextRequest) {
 
     // 生成 ffmpeg 输入文件列表
     const listPath = join(tmpDir, "list.txt");
-    // concat demuxer 需要每段结尾也有 duration，最后一张图片需要特殊处理
+    // concat demuxer 格式：每张图片两行（file + duration），最后一张图片需要重复一次
     let listContent = "";
     for (let i = 0; i < imagePaths.length; i++) {
       listContent += `file '${imagePaths[i]}'\n`;
-      if (i < imagePaths.length - 1) {
-        listContent += `duration ${duration}\n`;
-      }
+      listContent += `duration ${duration}\n`;
     }
-    // 最后一帧持续 duration 秒
-    listContent += `duration ${duration}\n`;
+    // 最后一张图片重复一次（不加 duration）
+    listContent += `file '${imagePaths[imagePaths.length - 1]}'\n`;
     writeFileSync(listPath, listContent);
+
+    console.log("[混剪] list.txt内容:", listContent);
 
     // 输出视频路径
     const outputDir = join(process.cwd(), "public", "uploads");
