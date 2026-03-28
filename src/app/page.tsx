@@ -530,6 +530,15 @@ export default function Home() {
                 <Wand2 className="w-4 h-4" />
                 AI文生图
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.href = "/rewrite"}
+                className="flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                文案提取
+              </Button>
               {project && (
                 <Badge variant="outline" className="text-sm">
                   项目ID: {project.id.slice(0, 8)}...
