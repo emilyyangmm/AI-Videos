@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Smartphone, Lock } from "lucide-react";
+import { Loader2, Smartphone, Lock, Gift } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -67,7 +68,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code })
+        body: JSON.stringify({ phone, code, inviteCode })
       });
       const data = await res.json();
 
@@ -137,6 +138,24 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* 邀请码 */}
+          {codeSent && (
+            <div className="space-y-2 animate-in slide-in-from-top-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Gift className="w-4 h-4" />
+                邀请码 <span className="text-gray-400 font-normal">(新用户必填)</span>
+              </label>
+              <Input
+                type="text"
+                placeholder="请输入邀请码"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                className="text-center tracking-widest"
+                maxLength={10}
+              />
+            </div>
+          )}
+
           {/* 登录按钮 */}
           <Button
             onClick={login}
@@ -156,7 +175,7 @@ export default function LoginPage() {
 
           {/* 提示 */}
           <p className="text-xs text-gray-500 text-center">
-            新用户登录即送 60 秒免费时长
+            新用户需填写邀请码登录，送 60 秒免费时长
           </p>
         </CardContent>
       </Card>

@@ -48,3 +48,11 @@ model Video {
   videoUrl  String?
   createdAt DateTime @default(now())
 }
+
+model InviteCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  usedBy    String?
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
