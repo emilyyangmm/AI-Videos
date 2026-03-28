@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getUserFromRequest } from "@/lib/auth";
-
-const prisma = new PrismaClient();
 
 // 有效套餐配置（秒数）
 const VALID_SECONDS = [60, 300, 1200];

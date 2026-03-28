@@ -3,9 +3,7 @@ import crypto from "crypto";
 import { writeFileSync, mkdirSync, existsSync, copyFileSync } from "fs";
 import { join } from "path";
 import { getUserFromRequest } from "@/lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // 火山引擎配置
 const VOLCENGINE_ACCESS_KEY = process.env.VOLCENGINE_ACCESS_KEY || "";
@@ -394,7 +392,7 @@ export async function POST(request: NextRequest) {
     const audioUploadDir = join(process.cwd(), 'public', 'uploads');
     const audioPublicPath = join(audioUploadDir, audioFileName);
     copyFileSync(audioPath, audioPublicPath);
-    const audioUrl = `http://130.211.240.194:5000/uploads/${audioFileName}`;
+    const audioUrl = `${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/uploads/${audioFileName}`;
     const duration = Math.ceil(script.length / 4.5); // 预估时长
     console.log(`[数字人] 音频已生成，使用公网URL: ${audioUrl}，预估时长: ${duration}秒`);
 
