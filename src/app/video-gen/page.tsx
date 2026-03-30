@@ -96,12 +96,19 @@ export default function VideoGenPage() {
 
       // 如果是图生视频模式，先上传图片
       if (mode === "i2v" && imageFile) {
-        const uploadFormData = new FormData();
-        uploadFormData.append("file", imageFile);
+        // 把图片转成 Data URL
+        const reader = new FileReader();
+        const imageDataUrl: string = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFile);
+        });
 
-        const uploadRes = await fetch("/api/image/upload", {
+        // 调用已有的上传接口
+        const uploadRes = await fetch("/api/upload/image", {
           method: "POST",
-          body: uploadFormData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: imageDataUrl }),
         });
         const uploadData = await uploadRes.json();
 
