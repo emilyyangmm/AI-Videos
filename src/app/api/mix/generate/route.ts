@@ -59,15 +59,15 @@ export async function POST(request: NextRequest) {
     // list.txt 路径（用于拼接）
     const listPath = join(tmpDir, "list.txt");
 
-    // 第一步：把每张图片转成独立视频片段
+    // 第一步：把每张图片转成独立视频片段（优化：降低分辨率、提高编码速度）
     console.log("[混剪] 第一步：生成视频片段...");
     const segPaths: string[] = [];
     for (let i = 0; i < imagePaths.length; i++) {
       const segPath = join(tmpDir, `seg_${i}.mp4`);
       console.log(`[混剪] 处理图片 ${i + 1}/${images.length}`);
       execSync(
-        `ffmpeg -loop 1 -i "${imagePaths[i]}" -vf "fps=30,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p" -t ${duration} -c:v libx264 -preset fast -y "${segPath}" 2>&1`,
-        { timeout: 60000, stdio: "pipe" }
+        `ffmpeg -loop 1 -i "${imagePaths[i]}" -vf "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p" -t ${duration} -c:v libx264 -preset ultrafast -crf 28 -r 15 -y "${segPath}" 2>&1`,
+        { timeout: 30000, stdio: "pipe" }
       );
       segPaths.push(segPath);
     }
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     console.log("[混剪] 第三步：拼接视频并添加BGM...");
     execSync(
       `ffmpeg -f concat -safe 0 -i "${listPath}" -i "${bgmPath}" -c:v copy -c:a aac -b:a 128k -shortest -y "${outputPath}" 2>&1`,
-      { timeout: 120000, stdio: "pipe" }
+      { timeout: 180000, stdio: "pipe" }
     );
 
     // 清理临时文件
