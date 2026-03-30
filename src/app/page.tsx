@@ -548,6 +548,15 @@ export default function Home() {
                 <Film className="w-4 h-4" />
                 AI混剪
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.href = "/video-gen"}
+                className="flex items-center gap-2"
+              >
+                <Video className="w-4 h-4" />
+                AI视频
+              </Button>
               {project && (
                 <Badge variant="outline" className="text-sm">
                   项目ID: {project.id.slice(0, 8)}...
