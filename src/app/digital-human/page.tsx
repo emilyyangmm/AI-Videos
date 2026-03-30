@@ -7,12 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Target, Sparkles, Lightbulb, Upload, FileText, Video, Film, Clock,
-  CheckCircle2, Loader2, ChevronRight, ChevronLeft, RefreshCw,
-  Play, Download, Trash2, Plus, Wand2
-} from "lucide-react";
-import { toast } from "sonner";
+import { Header } from "@/components/Header";
 
 // 类型定义
 interface Project {
@@ -507,65 +502,8 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm dark:bg-gray-900/80">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                爆款短视频智能生成
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                基于薛辉短视频架构方法论 · AI驱动创作
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = "/image"}
-                className="flex items-center gap-2"
-              >
-                <Wand2 className="w-4 h-4" />
-                AI文生图
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = "/rewrite"}
-                className="flex items-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                文案提取
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = "/mix"}
-                className="flex items-center gap-2"
-              >
-                <Film className="w-4 h-4" />
-                AI混剪
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.href = "/video-gen"}
-                className="flex items-center gap-2"
-              >
-                <Video className="w-4 h-4" />
-                AI视频
-              </Button>
-              {project && (
-                <Badge variant="outline" className="text-sm">
-                  项目ID: {project.id.slice(0, 8)}...
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#0a0a0f]">
+      <Header title="数字人口播" subtitle="AI驱动创作" />
 
       <main className="container mx-auto px-4 py-8">
         {/* 步骤导航 */}
