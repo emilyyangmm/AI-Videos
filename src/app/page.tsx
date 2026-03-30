@@ -14,7 +14,7 @@ import {
 interface UserInfo {
   id: string;
   phone: string;
-  balance: number;
+  seconds: number;
 }
 
 const FEATURES = [
@@ -75,11 +75,9 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setUserInfo(data.user);
-      } else {
-        setUserInfo(null);
       }
     } catch (error) {
-      setUserInfo(null);
+      console.error("获取用户信息失败:", error);
     } finally {
       setLoading(false);
     }
@@ -93,10 +91,12 @@ export default function Home() {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">AI Studio</span>
+              <Link href="/" className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <span className="text-xl font-bold text-white">AI Studio</span>
+              </Link>
             </div>
 
             {/* 右侧 */}
@@ -105,16 +105,13 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse" />
               ) : userInfo ? (
                 <>
-                  {/* 余额 */}
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
                     <Wallet className="w-4 h-4 text-yellow-400" />
                     <span className="text-sm font-medium text-white">{userInfo.seconds}秒</span>
                   </div>
-                  {/* 头像 */}
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                     <User className="w-5 h-5 text-white" />
                   </div>
-                  {/* 充值 */}
                   <Button
                     size="sm"
                     onClick={() => router.push("/recharge")}
