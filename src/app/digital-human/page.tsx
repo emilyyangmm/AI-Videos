@@ -8,6 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Header } from "@/components/Header";
+import {
+  Target, Sparkles, Lightbulb, Upload, FileText, Video, Film, Clock,
+  CheckCircle2, Loader2, ChevronRight, ChevronLeft, RefreshCw,
+  Play, Download, Trash2, Plus, Wand2
+} from "lucide-react";
+import { toast } from "sonner";
 
 // 类型定义
 interface Project {
