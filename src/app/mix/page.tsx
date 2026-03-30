@@ -378,8 +378,9 @@ export default function MixPage() {
                 {resultVideo ? (
                   <>
                     <video
-                      src={resultVideo}
                       controls
+                      autoPlay
+                      src={resultVideo}
                       className="w-full rounded-lg bg-black aspect-[9/16]"
                     />
                     <div className="flex gap-3">

@@ -154,11 +154,13 @@ export default function VideoGenPage() {
             setProgress(100);
             setGenerating(false);
             toast.success("视频生成成功！");
+            return; // 立即停止，不再继续轮询
           } else if (data.status === "failed") {
             clearInterval(interval);
             setError(data.error || "生成失败");
             setGenerating(false);
             toast.error(data.error || "生成失败");
+            return;
           }
           // else processing，继续轮询
         } else {

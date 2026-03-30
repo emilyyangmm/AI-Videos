@@ -34,11 +34,11 @@ export async function POST(request: NextRequest) {
       // 图生图
       url = "https://ark.cn-beijing.volces.com/api/v3/images/generations";
       body = {
-        model: "doubao-seededit-3-0-i2i-250628",
+        model: "doubao-seedream-5-0-260128",
         prompt: prompt.trim(),
         image: referenceImage,
-        response_format: "url",
-        size: "adaptive",
+        size: "2K",
+        output_format: "png",
         watermark: false,
       };
     } else {

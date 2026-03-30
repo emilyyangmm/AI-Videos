@@ -619,12 +619,12 @@ export default function Home() {
                           onClick={() => setVideoDuration(duration)}
                           className={`flex-1 py-3 rounded-lg border-2 transition-all ${
                             videoDuration === duration
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30"
-                              : "border-gray-200 hover:border-purple-300"
+                              ? "border-purple-500 bg-purple-800/60 text-white"
+                              : "border-white/10 bg-white/5 text-white hover:border-white/30"
                           }`}
                         >
                           <div className="text-lg font-bold">{duration}秒</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-white/70">
                             约 {DURATION_WORD_COUNT[duration].min}-{DURATION_WORD_COUNT[duration].max} 字
                           </div>
                         </button>
@@ -673,20 +673,20 @@ export default function Home() {
                         onClick={() => setScriptType(type.id)}
                         className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                           scriptType === type.id
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                            : "border-gray-200 hover:border-purple-300"
+                            ? "border-purple-500 bg-purple-900/50 text-white"
+                            : "border-white/10 bg-white/5 text-white hover:border-white/30"
                         }`}
                       >
                         <div className="flex items-center gap-3 mb-2">
                           <span className="text-2xl">{type.icon}</span>
                           <span className="text-lg font-semibold">{type.title}</span>
-                          {scriptType === type.id && <CheckCircle2 className="w-5 h-5 text-purple-600 ml-auto" />}
+                          {scriptType === type.id && <CheckCircle2 className="w-5 h-5 text-purple-400 ml-auto" />}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{type.description}</p>
-                        <div className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 p-2 rounded">
+                        <p className="text-sm text-white/70 mb-2">{type.description}</p>
+                        <div className="text-xs text-white/60 bg-white/10 p-2 rounded">
                           结构：{type.structure}
                         </div>
-                        <div className="mt-2 text-xs text-purple-600">
+                        <div className="mt-2 text-xs text-purple-400">
                           示例：{type.example}
                         </div>
                       </div>
@@ -729,8 +729,8 @@ export default function Home() {
                   {/* 爆款元素选择 */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">选择爆款元素（建议选2个）</label>
-                      <span className="text-sm text-gray-500">已选 {selectedElements.length}/3</span>
+                      <label className="text-sm font-medium text-white">选择爆款元素（建议选2个）</label>
+                      <span className="text-sm text-white/60">已选 {selectedElements.length}/3</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {VIRAL_ELEMENTS.map((element) => (
@@ -750,20 +750,20 @@ export default function Home() {
                           }}
                           className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                             selectedElements.includes(element.id)
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                              : "border-gray-200 hover:border-purple-300"
+                              ? "border-purple-500 bg-purple-900/50 text-white"
+                              : "border-white/10 bg-white/5 text-white hover:border-white/30"
                           } ${selectedElements.length >= 3 && !selectedElements.includes(element.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-xl">{element.icon}</span>
                             <span className="font-semibold text-sm">{element.title}</span>
-                            {selectedElements.includes(element.id) && <CheckCircle2 className="w-4 h-4 text-purple-600 ml-auto" />}
+                            {selectedElements.includes(element.id) && <CheckCircle2 className="w-4 h-4 text-purple-400 ml-auto" />}
                           </div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">{element.coreLogic}</p>
+                          <p className="text-xs text-white/70 mb-2">{element.coreLogic}</p>
                           {/* 显示钩子词根标签 */}
                           <div className="flex flex-wrap gap-1">
                             {element.hooks.map((hook, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">{hook}</Badge>
+                              <Badge key={i} variant="outline" className="text-xs border-white/20 text-white/80">{hook}</Badge>
                             ))}
                           </div>
                         </div>
