@@ -527,7 +527,8 @@ export default function Home() {
         const res = await fetch(`/api/digital-human/status?taskId=${taskId}`);
         const data = await res.json();
         
-        if (data.status === "completed" && data.video_url) {
+        // 同时支持 done/completed/success 三种完成状态
+        if ((data.status === "done" || data.status === "completed" || data.status === "success") && data.video_url) {
           clearInterval(pollInterval);
           setDigitalHumanVideo(data.video_url);
           setIsGenerating(false);
