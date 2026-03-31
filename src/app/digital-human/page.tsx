@@ -581,7 +581,7 @@ export default function Home() {
                       onChange={(e) => setUserIndustry(e.target.value)}
                       className="text-lg py-3"
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-400">
                       输入你的具体行业，越具体越好
                     </p>
                   </div>
@@ -597,13 +597,13 @@ export default function Home() {
                       onChange={(e) => setVideoGoal(e.target.value)}
                       className="text-lg py-3"
                     />
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-400">
                       明确目的，让AI生成更精准的内容
                     </p>
                   </div>
 
                   {/* 时长选择 */}
-                  <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
+                  <div className="p-4 bg-white/5 rounded-lg border border-white/10">
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-medium">视频时长</span>
                       {userIndustry && videoGoal && (
@@ -773,7 +773,7 @@ export default function Home() {
 
                   {/* 钩子词根选择区域 */}
                   {selectedElements.length > 0 && (
-                    <div className="space-y-3 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
+                    <div className="space-y-3 p-4 bg-white/5 rounded-lg border border-white/10">
                       <div className="flex items-center justify-between">
                         <label className="text-sm font-medium">勾选要使用的钩子词根</label>
                         <div className="flex gap-2">
@@ -799,14 +799,14 @@ export default function Home() {
                           </Button>
                         </div>
                       </div>
-                      <p className="text-xs text-gray-500">默认全选，可取消不想用的词根。开头第一句会使用选中的词根。</p>
+                      <p className="text-xs text-gray-400">默认全选，可取消不想用的词根。开头第一句会使用选中的词根。</p>
                       
                       {selectedElements.map((elementId) => {
                         const element = VIRAL_ELEMENTS.find(e => e.id === elementId);
                         if (!element) return null;
                         return (
                           <div key={elementId} className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-200">
                               <span>{element.icon}</span>
                               <span>{element.title}</span>
                             </div>
@@ -815,10 +815,10 @@ export default function Home() {
                                 <Badge
                                   key={`${elementId}-${i}`}
                                   variant={selectedHooks.includes(hook) ? "default" : "outline"}
-                                  className={`cursor-pointer transition-all ${
+                                  className={`cursor-pointer transition-all border ${
                                     selectedHooks.includes(hook)
-                                      ? "bg-purple-600 hover:bg-purple-700"
-                                      : "hover:bg-purple-100"
+                                      ? "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
+                                      : "hover:bg-purple-900/30 border-white/20 text-gray-300"
                                   }`}
                                   onClick={() => {
                                     if (selectedHooks.includes(hook)) {
@@ -843,13 +843,13 @@ export default function Home() {
 
                   {/* 已选钩子词根汇总 */}
                   {selectedHooks.length > 0 && (
-                    <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <p className="text-sm text-green-700 font-medium mb-2">
+                    <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                      <p className="text-sm text-gray-300 font-medium mb-2">
                         已勾选 {selectedHooks.length} 个钩子词根
                       </p>
                       <div className="flex flex-wrap gap-1">
                         {selectedHooks.map((hook, i) => (
-                          <Badge key={i} variant="outline" className="text-xs bg-white">{hook}</Badge>
+                          <Badge key={i} variant="outline" className="text-xs border-purple-500/50 text-purple-300">{hook}</Badge>
                         ))}
                       </div>
                     </div>
@@ -889,7 +889,7 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-400">
                       已选元素：{selectedElements.map(el => 
                         VIRAL_ELEMENTS.find(e => e.id === el)?.title
                       ).join('、')}
@@ -930,16 +930,16 @@ export default function Home() {
                         onClick={() => selectTopic(topic.id)}
                         className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                           topic.is_selected
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                            : "border-gray-200 hover:border-purple-300"
+                            ? "border-purple-500 bg-purple-900/50"
+                            : "border-white/10 bg-white/5 hover:border-white/30"
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-2">
-                          <Badge>选题 {topicIndex + 1}</Badge>
-                          {topic.is_selected && <CheckCircle2 className="w-4 h-4 text-purple-600" />}
+                          <Badge variant="outline" className="border-white/20 text-white">{topicIndex + 1}</Badge>
+                          {topic.is_selected && <CheckCircle2 className="w-4 h-4 text-purple-400" />}
                         </div>
-                        <h4 className="font-semibold mb-2">{topic.title}</h4>
-                        <div className="text-xs text-gray-500 space-y-1">
+                        <h4 className="font-semibold mb-2 text-white">{topic.title}</h4>
+                        <div className="text-xs text-gray-300 space-y-1">
                           <p>💥 {topic.conflict_point || topic.conflictPoint}</p>
                           <p>🎭 {topic.emotion_hook || topic.emotionHook}</p>
                         </div>
@@ -991,7 +991,7 @@ export default function Home() {
                         value={((script.wordCount || 0) / (script.targetWordCount?.max || 200)) * 100} 
                         className="h-2"
                       />
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <div className="flex justify-between text-xs text-gray-400 mt-1">
                         <span>预估时长：{script.estimatedDuration}秒</span>
                         <span>目标时长：{videoDuration}秒</span>
                       </div>
@@ -1002,38 +1002,38 @@ export default function Home() {
                   {script ? (
                     <div className="space-y-4">
                       {/* 开头钩子 */}
-                      <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border-l-4 border-red-500">
-                        <h4 className="font-medium text-red-700 mb-2">🎣 开头钩子（前3秒）</h4>
-                        <p className="text-sm">{script.openingHook}</p>
+                      <div className="p-4 bg-red-900/30 rounded-lg border-l-4 border-red-500">
+                        <h4 className="font-medium text-red-400 mb-2">🎣 开头钩子（前3秒）</h4>
+                        <p className="text-sm text-gray-200">{script.openingHook}</p>
                       </div>
 
                       {/* 中间内容 */}
-                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-4 border-blue-500">
-                        <h4 className="font-medium text-blue-700 mb-2">📝 中间内容</h4>
-                        <p className="text-sm whitespace-pre-wrap">{script.mainContent}</p>
+                      <div className="p-4 bg-blue-900/30 rounded-lg border-l-4 border-blue-500">
+                        <h4 className="font-medium text-blue-400 mb-2">📝 中间内容</h4>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{script.mainContent}</p>
                       </div>
 
                       {/* 结尾引导 */}
-                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-l-4 border-green-500">
-                        <h4 className="font-medium text-green-700 mb-2">🎯 结尾行动号召</h4>
-                        <p className="text-sm">{script.closingCTA}</p>
+                      <div className="p-4 bg-green-900/30 rounded-lg border-l-4 border-green-500">
+                        <h4 className="font-medium text-green-400 mb-2">🎯 结尾行动号召</h4>
+                        <p className="text-sm text-gray-200">{script.closingCTA}</p>
                       </div>
 
                       {/* 使用的钩子词根 */}
                       {script.usedHooks && script.usedHooks.length > 0 && (
-                        <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                          <p className="text-xs text-gray-500 mb-2">使用的钩子词根：</p>
+                        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                          <p className="text-xs text-gray-400 mb-2">使用的钩子词根：</p>
                           <div className="flex flex-wrap gap-1">
                             {script.usedHooks.map((hook: string, i: number) => (
-                              <Badge key={i} variant="secondary" className="text-xs">{hook}</Badge>
+                              <Badge key={i} variant="outline" className="text-xs border-white/20 text-white/80">{hook}</Badge>
                             ))}
                           </div>
                         </div>
                       )}
 
                       {/* 完整脚本 */}
-                      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <h4 className="font-medium mb-2">📄 完整脚本</h4>
+                      <div className="p-4 bg-white/5 rounded-lg border border-white/10">
+                        <h4 className="font-medium mb-2 text-white">📄 完整脚本</h4>
                         <Textarea 
                           value={script.script}
                           onChange={(e) => {
@@ -1123,7 +1123,7 @@ export default function Home() {
                       ) : (
                         <div>
                           <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-500">点击或拖拽上传人像图片</p>
+                          <p className="text-sm text-gray-400">点击或拖拽上传人像图片</p>
                           <Input
                             type="file"
                             accept="image/*"
@@ -1154,15 +1154,15 @@ export default function Home() {
                           onClick={() => setVoiceStyle(voice.id)}
                           className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                             voiceStyle === voice.id
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-md"
-                              : "border-gray-200 hover:border-purple-300 hover:shadow-sm"
+                              ? "border-purple-500 bg-purple-900/50 text-white"
+                              : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30"
                           }`}
                         >
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-lg">{voice.id.includes("male") ? "👨" : "👩"}</span>
                             <span className="text-sm font-semibold">{voice.name}</span>
                           </div>
-                          <p className="text-xs text-gray-500 line-clamp-2">{voice.desc}</p>
+                          <p className="text-xs text-gray-400 line-clamp-2">{voice.desc}</p>
                         </div>
                       ))}
                     </div>
@@ -1178,13 +1178,13 @@ export default function Home() {
                           onClick={() => setMotionStyle(motion.id)}
                           className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
                             motionStyle === motion.id
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                              : "border-gray-200 hover:border-purple-300"
+                              ? "border-purple-500 bg-purple-900/50 text-white"
+                              : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30"
                           }`}
                         >
                           <div className="text-xl mb-1">{motion.icon}</div>
                           <div className="text-sm font-medium">{motion.title}</div>
-                          <div className="text-xs text-gray-500 mt-1">{motion.description}</div>
+                          <div className="text-xs text-gray-400 mt-1">{motion.description}</div>
                         </div>
                       ))}
                     </div>
@@ -1199,7 +1199,7 @@ export default function Home() {
                       onChange={(e) => setDigitalHumanPrompt(e.target.value)}
                       className="min-h-[80px]"
                     />
-                    <p className="text-xs text-gray-500">支持中文，建议300字以内</p>
+                    <p className="text-xs text-gray-400">支持中文，建议300字以内</p>
                   </div>
 
                   {/* 生成按钮 */}
