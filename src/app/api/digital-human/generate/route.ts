@@ -357,6 +357,7 @@ export async function POST(request: NextRequest) {
         );
       }
       try {
+        const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
         // 去掉 Base64 头部
         const base64Data = portraitImage.replace(/^data:image\/\w+;base64,/, "");
         const matches = portraitImage.match(/^data:image\/(\w+);base64,/);
@@ -370,12 +371,16 @@ export async function POST(request: NextRequest) {
         const filePath = join(uploadDir, fileName);
         writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
         
-        // 构造公网 URL
-        const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000';
-        imageUrl = `${domain.replace(/\/$/, '')}/uploads/${fileName}`;
+        // 图片缩放逻辑：限制宽度最大300像素
+        const { execSync } = await import('child_process');
+        const resizedPath = filePath.replace(/\.\w+$/, '_resized.jpg');
+        execSync(`ffmpeg -i "${filePath}" -vf "scale=max(300\\,iw):-1" "${resizedPath}" -y 2>&1`);
+        // 用缩放后的图片构造URL
+        const resizedFileName = resizedPath.split('/').pop();
+        imageUrl = `${domain.replace(/\/$/, '')}/uploads/${resizedFileName}`;
         
         console.log(`[图片上传] 保存到: ${filePath}`);
-        console.log(`[图片上传] 公网URL: ${imageUrl}`);
+        console.log(`[图片上传] 缩放后URL: ${imageUrl}`);
       } catch (err) {
         console.error("[图片上传] 失败:", err);
         throw new Error("图片处理失败: " + String(err));
