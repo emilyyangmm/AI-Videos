@@ -378,11 +378,16 @@ export default function MixPage() {
                 {resultVideo ? (
                   <>
                     <video
+                      key={resultVideo}
+                      src={resultVideo}
                       controls
                       autoPlay
-                      src={resultVideo}
-                      className="w-full rounded-lg bg-black aspect-[9/16]"
-                    />
+                      playsInline
+                      className="w-full rounded-lg"
+                      style={{ maxHeight: '600px' }}
+                    >
+                      您的浏览器不支持视频播放
+                    </video>
                     <div className="flex gap-3">
                       <Button
                         variant="outline"
