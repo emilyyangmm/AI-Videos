@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
+import { execSync } from "child_process";
 
 const ARK_VIDEO_API_KEY = process.env.ARK_VIDEO_API_KEY || "";
 
@@ -35,8 +36,12 @@ export async function POST(request: NextRequest) {
       const fileName = `video_ref_${Date.now()}.${ext}`;
       const filePath = join(uploadDir, fileName);
       writeFileSync(filePath, Buffer.from(base64Data, "base64"));
+      // 图片放大逻辑：确保宽度至少300px
+      const resizedPath = filePath.replace(/\.\w+$/, '_resized.jpg');
+      execSync(`ffmpeg -i "${filePath}" -vf "scale=if(lt(iw\\,300)\\,300\\,-2):-2" -y "${resizedPath}" 2>&1`);
+      const resizedFileName = resizedPath.split('/').pop();
       const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || "http://localhost:5000";
-      finalImageUrl = `${domain}/uploads/${fileName}`;
+      finalImageUrl = `${domain}/uploads/${resizedFileName}`;
       console.log("[视频生成] 图片已保存:", finalImageUrl);
     }
 
