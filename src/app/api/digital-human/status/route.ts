@@ -188,20 +188,20 @@ export async function GET(request: NextRequest) {
     const progress = result.data?.progress || 0;
     const errorMessage = result.data?.error_message;
 
-    // 状态映射
-    // 火山引擎状态: PENDING, RUNNING, SUCCESS, FAILED
+    // 状态映射（兼容火山引擎可能的多种状态值）
+    // 火山引擎状态: PENDING, RUNNING, SUCCESS, FAILED, done, success
     let mappedStatus: string;
-    if (status === "SUCCESS") {
+    if (status === "SUCCESS" || status === "success" || status === "done") {
       mappedStatus = "completed";
-    } else if (status === "FAILED") {
+    } else if (status === "FAILED" || status === "failed") {
       mappedStatus = "failed";
-    } else if (status === "RUNNING") {
+    } else if (status === "RUNNING" || status === "running") {
       mappedStatus = "processing";
     } else {
       mappedStatus = "pending";
     }
 
-    console.log(`[数字人状态] 任务 ${taskId} 状态: ${mappedStatus}, 进度: ${progress}%`);
+    console.log(`[数字人状态] 任务 ${taskId} 原始状态: ${status}, 映射后: ${mappedStatus}, 进度: ${progress}%`);
 
     // 构建响应
     const response: any = {
@@ -212,7 +212,8 @@ export async function GET(request: NextRequest) {
     };
 
     // 如果完成，返回视频URL
-    if (mappedStatus === "completed" && videoUrl) {
+    if ((mappedStatus === "completed" || mappedStatus === "done") && videoUrl) {
+      response.status = "done";
       response.video_url = videoUrl;
       response.message = "视频生成完成";
     } else if (mappedStatus === "failed") {
