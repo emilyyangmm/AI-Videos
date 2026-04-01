@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
-import { execSync } from "child_process";
-import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
-import { join } from "path";
+import { callGemini } from "@/lib/gemini";
+
+const ELEMENT_NAMES: Record<string, string> = {
+  cost: "成本维度", crowd: "人群维度", curiosity: "猎奇维度",
+  contrast: "反差维度", worst: "最差元素", authority: "头牌效应",
+  nostalgia: "怀旧元素", hormone: "荷尔蒙驱动",
+};
+
+const SCRIPT_TYPE_NAMES: Record<string, string> = {
+  teach: "教知识（问题→解决方案→效果）",
+  show: "晒过程（场景→过程→结果）",
+  opinion: "聊观点（现象→观点→共鸣）",
+  story: "讲故事（冲突→转折→结局）",
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,103 +22,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "请先登录" }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const images = formData.getAll("images") as File[];
-    const bgm = formData.get("bgm") as string || "bgm1";
-    const duration = parseInt(formData.get("duration") as string || "3"); // 每张图片显示秒数
-    const title = formData.get("title") as string || "";
+    const body = await request.json();
+    const { industry, goal, duration, scriptType, viralElements, selectedHooks, targetWords } = body;
 
-    if (!images || images.length === 0) {
-      return NextResponse.json({ success: false, error: "请上传至少1张图片" }, { status: 400 });
-    }
-    if (images.length > 10) {
-      return NextResponse.json({ success: false, error: "最多上传10张图片" }, { status: 400 });
+    if (!industry || !goal || !scriptType || !viralElements?.length) {
+      return NextResponse.json({ success: false, error: "参数不完整" }, { status: 400 });
     }
 
-    console.log("[混剪] 开始处理:", { imageCount: images.length, bgm, duration });
+    const elementNames = (viralElements as string[]).map(id => ELEMENT_NAMES[id] || id).join("、");
+    const hooksText = selectedHooks?.length ? selectedHooks.join("、") : "无";
+    const scriptTypeName = SCRIPT_TYPE_NAMES[scriptType] || scriptType;
 
-    const tmpDir = `/tmp/mix_${Date.now()}`;
-    mkdirSync(tmpDir, { recursive: true });
+    const prompt = `你是薛辉老师的学生，精通短视频爆款营销文案创作。请根据以下信息，生成一篇完整的短视频口播营销文案。
 
-    // 保存图片到临时目录
-    const imagePaths: string[] = [];
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const ext = img.name.split(".").pop() || "jpg";
-      const imgPath = join(tmpDir, `img_${i}.${ext}`);
-      writeFileSync(imgPath, Buffer.from(await img.arrayBuffer()));
-      imagePaths.push(imgPath);
-    }
+## 基本信息
+- 行业：${industry}
+- 视频目的：${goal}
+- 视频时长：${duration}秒（约${targetWords?.min || 110}~${targetWords?.max || 140}字）
+- 脚本类型：${scriptTypeName}
 
-    // 计算总时长
-    const totalDuration = images.length * duration;
+## 薛老师爆款元素（必须融入）
+- 选用元素：${elementNames}
+- 钩子词根（必须在开头第一句用上）：${hooksText}
 
-    // 输出视频路径
-    const outputDir = join(process.cwd(), "public", "uploads");
-    if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true });
-    const outputName = `mix_${Date.now()}.mp4`;
-    const outputPath = join(outputDir, outputName);
+## 写作要求
+1. 开头第一句必须使用钩子词根，3秒内抓住注意力
+2. 严格按照"${scriptTypeName.split("（")[0]}"结构展开
+3. 口语化表达，适合视频口播
+4. 字数严格控制在${targetWords?.min || 110}~${targetWords?.max || 140}字之间
+5. 结尾必须有明确的行动号召（关注/评论/购买/到店等）
 
-    // BGM 路径
-    const bgmPath = join(process.cwd(), "public", "bgm", `${bgm}.mp3`);
+## 输出格式（严格按此JSON格式输出，不要有其他文字）
+{
+  "title": "视频标题（15字以内，吸引人点击）",
+  "openingHook": "开头钩子文案（前3秒，用上钩子词根）",
+  "mainContent": "中间内容（价值输出，多行用\\n分隔）",
+  "closingCTA": "结尾行动号召",
+  "fullScript": "完整口播脚本（openingHook+mainContent+closingCTA的完整版，自然连贯）",
+  "usedHooks": ["实际用到的钩子词根列表"]
+}`;
 
-    // 检查 BGM 是否存在
-    if (!existsSync(bgmPath)) {
-      throw new Error(`BGM文件不存在: ${bgmPath}，请先上传BGM文件`);
-    }
+    const raw = await callGemini(prompt);
 
-    // list.txt 路径（用于拼接）
-    const listPath = join(tmpDir, "list.txt");
+    // 提取JSON
+    let jsonStr = raw;
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
 
-    // 第一步：把每张图片转成独立视频片段（优化：降低分辨率、提高编码速度）
-    console.log("[混剪] 第一步：生成视频片段...");
-    const segPaths: string[] = [];
-    for (let i = 0; i < imagePaths.length; i++) {
-      const segPath = join(tmpDir, `seg_${i}.mp4`);
-      console.log(`[混剪] 处理图片 ${i + 1}/${images.length}`);
-      execSync(
-        `ffmpeg -loop 1 -i "${imagePaths[i]}" -vf "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p" -t ${duration} -c:v libx264 -preset ultrafast -crf 28 -r 15 -y "${segPath}" 2>&1`,
-        { timeout: 30000, stdio: "pipe" }
-      );
-      segPaths.push(segPath);
-    }
-
-    // 第二步：生成拼接列表
-    console.log("[混剪] 第二步：生成拼接列表...");
-    const concatContent = segPaths.map(p => `file '${p}'`).join("\n");
-    writeFileSync(listPath, concatContent);
-    console.log("[混剪] 拼接列表:", concatContent);
-
-    // 第三步：拼接视频并加BGM
-    console.log("[混剪] 第三步：拼接视频并添加BGM...");
-    execSync(
-      `ffmpeg -f concat -safe 0 -i "${listPath}" -i "${bgmPath}" -c:v copy -c:a aac -b:a 128k -shortest -y "${outputPath}" 2>&1`,
-      { timeout: 180000, stdio: "pipe" }
-    );
-
-    // 清理临时文件
+    let parsed: any;
     try {
-      for (const p of imagePaths) unlinkSync(p);
-      for (const p of segPaths) unlinkSync(p);
-      unlinkSync(listPath);
-      unlinkSync(tmpDir);
-    } catch (e) { /* 忽略清理错误 */ }
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      // 如果解析失败，构造基本结构
+      parsed = {
+        title: `${industry}营销文案`,
+        openingHook: raw.substring(0, 50),
+        mainContent: raw.substring(50, raw.length - 30),
+        closingCTA: raw.substring(raw.length - 30),
+        fullScript: raw,
+        usedHooks: selectedHooks?.slice(0, 2) || [],
+      };
+    }
 
-    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || "http://localhost:5000";
-    const videoUrl = `${domain}/uploads/${outputName}`;
+    const copy = {
+      ...parsed,
+      wordCount: (parsed.fullScript || "").length,
+      usedElements: viralElements,
+    };
 
-    console.log("[混剪] 完成:", videoUrl);
-
-    return NextResponse.json({
-      success: true,
-      video_url: videoUrl,
-      duration: totalDuration
-    });
+    return NextResponse.json({ success: true, copy });
   } catch (error: any) {
-    console.error("[混剪] 错误:", error.message || error);
-    return NextResponse.json({
-      success: false,
-      error: error.message || String(error)
-    }, { status: 500 });
+    console.error("[营销文案] 生成错误:", error);
+    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
   }
 }

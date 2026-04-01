@@ -37,16 +37,16 @@ const FEATURES = [
   {
     id: "rewrite",
     icon: FileText,
-    title: "文案提取",
-    desc: "视频转文字一键洗稿改写",
+    title: "抖音拉片",           // ← 改这里
+    desc: "博主爆款视频→改写→数字人", // ← 改这里
     gradient: "from-green-600 to-emerald-600",
     href: "/rewrite"
   },
   {
     id: "mix",
     icon: Film,
-    title: "图片混剪",
-    desc: "多图一键合成短视频加BGM",
+    title: "营销文案",           // ← 改这里
+    desc: "薛老师理论一键生成爆款文案", // ← 改这里
     gradient: "from-orange-600 to-amber-600",
     href: "/mix"
   },
