@@ -1,17 +1,15 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(pwd)}"
-
-cd "${COZE_WORKSPACE_PATH}"
+# 1. 确保在正确的目录下
+cd "$(pwd)"
 
 echo "Installing dependencies..."
-pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only
+# 去掉那些死板的参数，让 pnpm 自由安装所需的包
+pnpm install
 
 echo "Building the Next.js project..."
-pnpm next build
-
-echo "Bundling server with tsup..."
-pnpm tsup src/server.ts --format cjs --platform node --target node20 --outDir dist --no-splitting --no-minify
+# 使用标准的 build 命令
+pnpm run build
 
 echo "Build completed successfully!"
